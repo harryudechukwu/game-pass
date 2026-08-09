@@ -1,0 +1,256 @@
+// Game Pass — Self-Service Physical Arcade System
+// Backend is the single source of truth. SQLite for a zero-dependency local V1.
+// String status fields are documented with their allowed values (SQLite has no enums).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Customers & wallet
+// ─────────────────────────────────────────────────────────────
+
+model Customer {
+  id              String    @id @default(cuid())
+  phone           String    @unique
+  name            String?
+  dateOfBirth     DateTime?
+  termsAcceptedAt DateTime?
+  // `balance` is a safe transactional mirror of the ledger. It is only ever
+  // mutated atomically alongside a WalletTransaction (see lib/wallet.ts).
+  balance         Int       @default(0)
+  suspended       Boolean   @default(false)
+  suspendedReason String?
+  firstVisitAt    DateTime? // set when the customer's first session completes
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  walletTransactions WalletTransaction[]
+  playPasses         PlayPass[]
+  sessions           GameSession[]
+  purchases          Purchase[]
+  rewardIssues       RewardIssue[]
+
+  @@index([phone])
+}
+
+// Immutable, append-only ledger. Every balance change is one row here.
+model WalletTransaction {
+  id               String   @id @default(cuid())
+  customer         Customer @relation(fields: [customerId], references: [id])
+  customerId       String
+  amount           Int // signed: +credit / -debit
+  type             String // signup_bonus | purchase | play_spend | reward | promo | admin_credit | admin_debit | refund
+  reason           String
+  balanceAfter     Int
+  referenceType    String? // play_pass | session | purchase | reward | admin
+  referenceId      String?
+  createdByAdminId String?
+  createdAt        DateTime @default(now())
+
+  @@index([customerId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Games (physical activities at the venue)
+// ─────────────────────────────────────────────────────────────
+
+model Game {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  description     String
+  imageUrl        String
+  pointCost       Int
+  durationSeconds Int
+  minPlayers      Int      @default(1)
+  maxPlayers      Int      @default(1)
+  location        String
+  minAge          Int?
+  minHeightCm     Int?
+  instructions    String?
+  rules           String?
+  safety          String?
+  status          String   @default("active") // active | inactive | maintenance
+  selfServiceMode Boolean  @default(true)
+  featured        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  playPasses PlayPass[]
+  sessions   GameSession[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// Play Pass — single-use authorization token
+// ─────────────────────────────────────────────────────────────
+
+model PlayPass {
+  id          String       @id @default(cuid())
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  customerId  String
+  game        Game         @relation(fields: [gameId], references: [id])
+  gameId      String
+  pointCost   Int
+  status      String       @default("created") // created | activated | in_progress | completed | expired | cancelled
+  qrToken     String       @unique // opaque secret encoded into the QR image
+  createdAt   DateTime     @default(now())
+  expiresAt   DateTime
+  activatedAt DateTime?
+  session     GameSession?
+
+  @@index([customerId])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Game Session
+// ─────────────────────────────────────────────────────────────
+
+model GameSession {
+  id                 String    @id @default(cuid())
+  customer           Customer  @relation(fields: [customerId], references: [id])
+  customerId         String
+  game               Game      @relation(fields: [gameId], references: [id])
+  gameId             String
+  playPass           PlayPass  @relation(fields: [playPassId], references: [id])
+  playPassId         String    @unique
+  pointsSpent        Int
+  status             String    @default("authorized") // pending | authorized | in_progress | completed | cancelled | expired
+  startTime          DateTime?
+  expectedEndTime    DateTime?
+  completionTime     DateTime?
+  score              Int?
+  rewardPointsEarned Int       @default(0)
+  stationId          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  rewardIssues RewardIssue[]
+
+  @@index([customerId, createdAt])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Rewards (configurable, not hardcoded)
+// ─────────────────────────────────────────────────────────────
+
+model RewardRule {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  conditionType String // play_completed | score_above | games_count | first_visit
+  threshold     Int? // score value or games count, depending on conditionType
+  points        Int
+  active        Boolean  @default(true)
+  expiryDays    Int? // informational: when issued reward points expire
+  priority      Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  issues RewardIssue[]
+}
+
+model RewardIssue {
+  id          String       @id @default(cuid())
+  customer    Customer     @relation(fields: [customerId], references: [id])
+  customerId  String
+  rule        RewardRule   @relation(fields: [ruleId], references: [id])
+  ruleId      String
+  session     GameSession? @relation(fields: [sessionId], references: [id])
+  sessionId   String?
+  points      Int
+  walletTxnId String?
+  createdAt   DateTime     @default(now())
+
+  @@index([customerId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Point purchases
+// ─────────────────────────────────────────────────────────────
+
+model PointPackage {
+  id          String   @id @default(cuid())
+  name        String
+  points      Int
+  bonusPoints Int      @default(0)
+  priceKobo   Int // amount in minor currency unit (kobo for NGN)
+  currency    String   @default("NGN")
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  purchases Purchase[]
+}
+
+model Purchase {
+  id             String       @id @default(cuid())
+  customer       Customer     @relation(fields: [customerId], references: [id])
+  customerId     String
+  package        PointPackage @relation(fields: [packageId], references: [id])
+  packageId      String
+  pointsCredited Int
+  amountKobo     Int
+  currency       String       @default("NGN")
+  provider       String       @default("paystack")
+  reference      String       @unique
+  status         String       @default("pending") // pending | success | failed
+  walletTxnId    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin, audit, auth, idempotency
+// ─────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("staff") // admin | staff
+  createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorType  String // admin | system | customer
+  actorId    String?
+  actorName  String?
+  action     String
+  targetType String?
+  targetId   String?
+  detail     String? // JSON blob
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+
+  @@index([phone])
+}
+
+// Guards against duplicate mutating requests (activation, purchase confirm, etc.)
+model IdempotencyKey {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  scope        String
+  responseJson String
+  createdAt    DateTime @default(now())
+}

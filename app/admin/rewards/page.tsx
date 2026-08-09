@@ -1,0 +1,179 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Plus, Pencil, X, Power } from "lucide-react";
+import { api, ApiClientError } from "@/lib/client";
+import { Loading, ErrorNote } from "@/components/ui";
+
+type Reward = {
+  id: string;
+  name: string;
+  description: string | null;
+  conditionType: string;
+  threshold: number | null;
+  points: number;
+  active: boolean;
+  priority: number;
+};
+
+const CONDITIONS = [
+  { value: "play_completed", label: "Every completed play", needsThreshold: false },
+  { value: "score_above", label: "Score above threshold", needsThreshold: true },
+  { value: "games_count", label: "Every N games", needsThreshold: true },
+  { value: "first_visit", label: "First visit (one-time)", needsThreshold: false },
+];
+
+export default function AdminRewardsPage() {
+  const [rewards, setRewards] = useState<Reward[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<Partial<Reward> | null>(null);
+
+  async function load() {
+    const r = await api<{ rewards: Reward[] }>("/api/admin/rewards");
+    setRewards(r.rewards);
+  }
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+  }, []);
+
+  async function toggle(r: Reward) {
+    await api(`/api/admin/rewards/${r.id}`, { method: "PATCH", body: { active: !r.active } });
+    await load();
+  }
+
+  if (loading) return <Loading />;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight">Rewards</h1>
+          <p className="text-sm text-white/50">Configurable rules — evaluated when a session completes.</p>
+        </div>
+        <button className="btn-primary" onClick={() => setEditing({ conditionType: "play_completed", points: 5, active: true, priority: 0 })}>
+          <Plus size={18} /> New reward
+        </button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {rewards.map((r) => (
+          <div key={r.id} className={`card p-4 ${!r.active ? "opacity-60" : ""}`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-bold">{r.name}</h3>
+                <p className="text-xs text-white/45">{r.description}</p>
+              </div>
+              <span className="pill bg-emerald-500/15 font-bold text-emerald-300">+{r.points}</span>
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-xs text-white/50">
+              <span className="rounded bg-white/5 px-2 py-1">
+                {CONDITIONS.find((c) => c.value === r.conditionType)?.label ?? r.conditionType}
+                {r.threshold != null ? ` · ${r.threshold}` : ""}
+              </span>
+              <span className="ml-auto flex gap-1">
+                <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => toggle(r)}>
+                  <Power size={13} /> {r.active ? "Disable" : "Enable"}
+                </button>
+                <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setEditing(r)}>
+                  <Pencil size={13} /> Edit
+                </button>
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editing && <RewardForm initial={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await load(); }} />}
+    </div>
+  );
+}
+
+function RewardForm({ initial, onClose, onSaved }: { initial: Partial<Reward>; onClose: () => void; onSaved: () => void }) {
+  const isEdit = Boolean(initial.id);
+  const [form, setForm] = useState({
+    name: initial.name ?? "",
+    description: initial.description ?? "",
+    conditionType: initial.conditionType ?? "play_completed",
+    threshold: initial.threshold ?? "",
+    points: initial.points ?? 5,
+    active: initial.active ?? true,
+    priority: initial.priority ?? 0,
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const needsThreshold = CONDITIONS.find((c) => c.value === form.conditionType)?.needsThreshold;
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    const payload = {
+      name: form.name,
+      description: form.description || null,
+      conditionType: form.conditionType,
+      threshold: needsThreshold && form.threshold !== "" ? Number(form.threshold) : null,
+      points: Number(form.points),
+      active: form.active,
+      priority: Number(form.priority),
+    };
+    try {
+      if (isEdit) await api(`/api/admin/rewards/${initial.id}`, { method: "PATCH", body: payload });
+      else await api("/api/admin/rewards", { method: "POST", body: payload });
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Save failed.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#141a2e] p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-xl font-bold">{isEdit ? "Edit reward" : "New reward"}</h2>
+          <button onClick={onClose} className="text-white/50 hover:text-white"><X size={20} /></button>
+        </div>
+        {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+        <div className="space-y-4">
+          <div>
+            <label className="label">Name</label>
+            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Description</label>
+            <input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div>
+            <label className="label">Condition</label>
+            <select className="input" value={form.conditionType} onChange={(e) => setForm({ ...form, conditionType: e.target.value })}>
+              {CONDITIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {needsThreshold && (
+              <div>
+                <label className="label">Threshold</label>
+                <input type="number" className="input" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: e.target.value as never })} />
+              </div>
+            )}
+            <div>
+              <label className="label">Points</label>
+              <input type="number" className="input" value={form.points} onChange={(e) => setForm({ ...form, points: e.target.value as never })} />
+            </div>
+            <div>
+              <label className="label">Priority</label>
+              <input type="number" className="input" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value as never })} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4 accent-[#58cc02]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+            Active
+          </label>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn-primary" onClick={save} disabled={busy || !form.name}>{busy ? "Saving…" : "Save"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
