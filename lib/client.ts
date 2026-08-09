@@ -1,4 +1,8 @@
-// Client-side fetch wrapper matching the { ok, data | error } API envelope.
+import { localApi, LocalError } from "@/lib/local/api";
+
+// This used to be a fetch wrapper hitting a REST backend. In the demo build there
+// is no server — `api()` dispatches to the in-browser engine over localStorage,
+// keeping the exact same signature and return shapes so no page had to change.
 
 export class ApiClientError extends Error {
   code: string;
@@ -10,25 +14,23 @@ export class ApiClientError extends Error {
   }
 }
 
-type Options = Omit<RequestInit, "body"> & { body?: unknown };
+type Options = Omit<RequestInit, "body" | "headers"> & {
+  body?: unknown;
+  headers?: Record<string, string>;
+};
 
 export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
-  const { body, headers, ...rest } = opts;
-  const res = await fetch(path, {
-    ...rest,
-    headers: {
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(headers ?? {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const json = await res.json().catch(() => null);
-  if (!res.ok || !json?.ok) {
-    throw new ApiClientError(
-      json?.error?.message ?? res.statusText ?? "Request failed",
-      json?.error?.code ?? "error",
-      res.status,
+  const method = (opts.method ?? "GET").toString().toUpperCase();
+  try {
+    const data = await localApi(
+      path,
+      method,
+      opts.body as Record<string, unknown> | undefined,
+      opts.headers,
     );
+    return data as T;
+  } catch (e) {
+    if (e instanceof LocalError) throw new ApiClientError(e.message, e.code, e.status);
+    throw e;
   }
-  return json.data as T;
 }

@@ -1,0 +1,14 @@
+# Netlify build configuration.
+# The app is client-only (no server, no database) — all state lives in the
+# visitor's browser (localStorage). The official Next.js runtime is auto-installed
+# and handles routing/SSR of the client shell. No environment variables needed.
+
+[build]
+  command = "next build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

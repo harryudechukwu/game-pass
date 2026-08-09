@@ -172,12 +172,18 @@ function GameForm({
     setUploading(true);
     setError("");
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error?.message ?? "Upload failed");
-      set("imageUrl", json.data.url);
+      // Demo: read the image into a data URL stored in localStorage. Keep it
+      // small so we don't blow the storage quota — otherwise paste a URL.
+      if (file.size > 1024 * 1024) {
+        throw new Error("Image too large for the demo store — use one under 1MB, or paste a URL.");
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Could not read the file."));
+        reader.readAsDataURL(file);
+      });
+      set("imageUrl", dataUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {

@@ -3,31 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "prisma": {
-    "seed": "node prisma/seed.ts"
-  },
   "scripts": {
     "dev": "next dev --port 3005",
     "build": "next build",
     "start": "next start --port 3005",
-    "lint": "next lint",
-    "db:push": "prisma db push",
-    "db:seed": "node prisma/seed.ts",
-    "db:reset": "prisma db push --force-reset && npm run db:seed",
-    "db:studio": "prisma studio"
+    "lint": "next lint"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
     "clsx": "^2.1.1",
-    "jose": "^5.9.6",
     "lucide-react": "^0.525.0",
     "nanoid": "^5.0.9",
     "next": "^15.3.8",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.3.1",
-    "zod": "^4.1.12"
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -35,7 +25,6 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "prisma": "^6.2.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
