@@ -1,176 +1,140 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Sparkles, Zap, Ticket, ArrowRight, Trophy, ChevronRight } from "lucide-react";
+import { Gamepad2, MapPin, Clock, Gift, Sparkles, ArrowRight, Trophy } from "lucide-react";
 import { api } from "@/lib/client";
-import { pts, timeAgo } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 import { useCustomer } from "@/components/customer/CustomerProvider";
-import { GameCard, type GameLite } from "@/components/customer/GameCard";
 import { Loading } from "@/components/ui";
-import { PassCountdown } from "@/components/customer/PassCountdown";
 
-type Reward = { id: string; name: string; description: string | null; points: number };
-type Txn = { id: string; amount: number; reason: string; createdAt: string };
+type Log = {
+  id: string;
+  loggedAt: string;
+  game: { id: string; name: string; imageUrl: string; location: string; durationLabel: string } | null;
+};
+type NextReward = { name: string; gamesRequired: number; remaining: number } | null;
 
 export default function HomePage() {
-  const { customer, activePass } = useCustomer();
-  const [games, setGames] = useState<GameLite[]>([]);
-  const [featured, setFeatured] = useState<GameLite[]>([]);
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [recent, setRecent] = useState<Txn[]>([]);
+  const { refresh } = useCustomer();
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [gamesPlayed, setGamesPlayed] = useState(0);
+  const [nextReward, setNextReward] = useState<NextReward>(null);
+  const [claimable, setClaimable] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [bonus, setBonus] = useState<number | null>(null);
 
-  useEffect(() => {
-    const b = sessionStorage.getItem("welcomeBonus");
-    if (b) {
-      setBonus(Number(b));
-      sessionStorage.removeItem("welcomeBonus");
-    }
-    Promise.all([
-      api<{ games: GameLite[]; featured: GameLite[] }>("/api/games"),
-      api<{ rewards: Reward[] }>("/api/rewards"),
-      api<{ transactions: Txn[] }>("/api/wallet"),
-    ])
-      .then(([g, r, w]) => {
-        setGames(g.games);
-        setFeatured(g.featured);
-        setRewards(r.rewards);
-        setRecent(w.transactions.slice(0, 4));
-      })
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const [l, r] = await Promise.all([
+      api<{ gamesPlayed: number; logs: Log[] }>("/api/logs"),
+      api<{ nextReward: NextReward; rewards: { id: string; name: string; claimable: boolean }[] }>("/api/rewards"),
+    ]);
+    setLogs(l.logs);
+    setGamesPlayed(l.gamesPlayed);
+    setNextReward(r.nextReward);
+    setClaimable(r.rewards.filter((x) => x.claimable).map((x) => ({ id: x.id, name: x.name })));
   }, []);
 
-  return (
-    <div className="space-y-7">
-      {bonus && (
-        <div className="flex items-center gap-3 rounded-2xl border border-[#ffc800]/30 bg-gradient-to-r from-[#ffc800]/15 to-transparent p-4">
-          <Sparkles className="text-[#ffc800]" />
-          <div>
-            <p className="font-bold">Welcome! You&apos;ve received {bonus} bonus points.</p>
-            <p className="text-sm text-white/60">Spend them on any physical game at the venue.</p>
-          </div>
-        </div>
-      )}
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+    const t = setInterval(() => { load().catch(() => {}); refresh().catch(() => {}); }, 4000);
+    return () => clearInterval(t);
+  }, [load, refresh]);
 
-      {/* Balance hero */}
+  const progressPct = nextReward
+    ? Math.min(100, Math.round(((nextReward.gamesRequired - nextReward.remaining) / nextReward.gamesRequired) * 100))
+    : 100;
+
+  return (
+    <div className="space-y-6">
+      {/* Games-played hero */}
       <section className="on-brand relative overflow-hidden rounded-3xl border-2 border-[#46a302] bg-gradient-to-br from-[#58cc02] to-[#43a600] p-6 shadow-[0_6px_0_0_#3c9200]">
-        <div className="pointer-events-none absolute -right-8 -top-10 text-8xl opacity-20 blur-[1px]">🕹️</div>
-        <p className="text-sm font-bold uppercase tracking-wide text-white/80">Your balance</p>
+        <div className="pointer-events-none absolute -right-6 -top-8 text-8xl opacity-20">🎮</div>
+        <p className="text-sm font-bold uppercase tracking-wide text-white/80">Games played</p>
         <div className="mt-1 flex items-end gap-2">
-          <span className="text-6xl font-black tracking-tight text-white drop-shadow-sm">{pts(customer.balance)}</span>
-          <span className="mb-2 text-sm font-black tracking-widest text-white/80">POINTS</span>
+          <span className="text-6xl font-black tracking-tight text-white drop-shadow-sm">{gamesPlayed}</span>
+          <span className="mb-2 text-sm font-black tracking-widest text-white/80">GAMES</span>
         </div>
-        <div className="mt-5 flex gap-2">
-          <a href="#catalogue" className="btn-gold flex-1">
-            <Zap size={18} /> Play Now
-          </a>
-          <Link href="/wallet" className="btn-ghost">
-            Buy points
-          </Link>
-        </div>
+        <p className="mt-1 text-sm text-white/80">Play at the venue, then have the attendant log it here.</p>
       </section>
 
-      {/* Active pass */}
-      {activePass && (
-        <Link
-          href="/pass"
-          className="flex items-center gap-4 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4"
-        >
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/20 text-emerald-300">
-            <Ticket size={22} />
+      {/* Claimable rewards callout */}
+      {claimable.length > 0 && (
+        <Link href="/rewards" className="flex items-center gap-3 rounded-2xl border-2 border-[#ffc800]/40 bg-[#ffc800]/10 p-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ffc800]/20 text-[#ffc800]">
+            <Gift size={22} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">Active Play Pass · {activePass.game?.name}</p>
-            <p className="text-xs text-white/60">
-              <PassCountdown initialSeconds={activePass.expiresInSeconds} status={activePass.status} /> · tap to view QR
+            <p className="text-sm font-bold">
+              {claimable.length === 1 ? "You've unlocked a reward!" : `You've unlocked ${claimable.length} rewards!`}
             </p>
+            <p className="truncate text-xs text-white/60">{claimable.map((c) => c.name).join(", ")} · tap to redeem</p>
           </div>
-          <ArrowRight className="text-emerald-300" size={18} />
+          <ArrowRight className="text-[#ffc800]" size={18} />
         </Link>
       )}
 
-      {loading ? (
-        <Loading />
-      ) : (
-        <>
-          {/* Featured */}
-          {featured.length > 0 && (
-            <section>
-              <SectionTitle>Featured</SectionTitle>
-              <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2">
-                {featured.map((g) => (
-                  <GameCard key={g.id} game={g} compact />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Ways to earn */}
-          {rewards.length > 0 && (
-            <section>
-              <SectionTitle>Ways to earn rewards</SectionTitle>
-              <div className="grid grid-cols-2 gap-2">
-                {rewards.map((r) => (
-                  <div key={r.id} className="card p-3">
-                    <div className="flex items-center gap-2">
-                      <Trophy size={15} className="text-[#ffc800]" />
-                      <p className="text-sm font-semibold">{r.name}</p>
-                    </div>
-                    <p className="mt-1 text-xs text-white/50">{r.description}</p>
-                    <p className="mt-1.5 text-sm font-bold text-emerald-300">+{r.points} pts</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Catalogue */}
-          <section id="catalogue" className="scroll-mt-20">
-            <SectionTitle>Choose a physical game</SectionTitle>
-            <p className="-mt-2 mb-3 text-xs text-white/45">
-              Real activities on the arcade floor. Pay with points, get a Play Pass, scan at the
-              station.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              {games.map((g) => (
-                <GameCard key={g.id} game={g} />
-              ))}
-            </div>
-          </section>
-
-          {/* Recent activity */}
-          {recent.length > 0 && (
-            <section>
-              <div className="mb-2 flex items-center justify-between">
-                <SectionTitle className="mb-0">Recent activity</SectionTitle>
-                <Link href="/activity" className="inline-flex items-center text-xs text-white/50 hover:text-white">
-                  See all <ChevronRight size={14} />
-                </Link>
-              </div>
-              <div className="card divide-y divide-white/5">
-                {recent.map((t) => (
-                  <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm">{t.reason}</p>
-                      <p className="text-xs text-white/40">{timeAgo(t.createdAt)}</p>
-                    </div>
-                    <span className={`text-sm font-bold ${t.amount >= 0 ? "text-emerald-300" : "text-white/70"}`}>
-                      {t.amount >= 0 ? "+" : ""}
-                      {t.amount}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </>
+      {/* Progress to next reward */}
+      {nextReward && (
+        <section className="card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold">
+              <Trophy size={15} className="text-[#ffc800]" /> Next reward: {nextReward.name}
+            </span>
+            <span className="text-xs text-white/50">{gamesPlayed}/{nextReward.gamesRequired}</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-gradient-to-r from-[#58cc02] to-[#1cb0f6] transition-all" style={{ width: `${progressPct}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-white/55">
+            {nextReward.remaining === 1 ? "1 more game" : `${nextReward.remaining} more games`} to unlock it.
+          </p>
+        </section>
       )}
+
+      {/* Logged games feed */}
+      <section>
+        <h2 className="mb-3 text-lg font-bold">Your games</h2>
+        {loading ? (
+          <Loading />
+        ) : logs.length === 0 ? (
+          <div className="card p-8 text-center">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5 text-white/40">
+              <Gamepad2 size={26} />
+            </div>
+            <p className="font-semibold">No games logged yet</p>
+            <p className="mt-1 text-sm text-white/50">
+              After you play at the venue, ask the attendant to log it — it&apos;ll show up right here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {logs.map((l, i) => (
+              <div
+                key={l.id}
+                className={`card flex items-center gap-3 overflow-hidden p-3 ${i === 0 ? "border-[#58cc02]/40" : ""}`}
+              >
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-[#1c2340] to-[#0a0e1a]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {l.game?.imageUrl && <img src={l.game.imageUrl} alt="" className="h-full w-full object-cover" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="truncate font-bold">{l.game?.name ?? "Game"}</p>
+                    {i === 0 && (
+                      <span className="pill shrink-0 bg-[#58cc02]/15 text-[#58cc02]"><Sparkles size={11} /> new</span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-white/45">
+                    <span className="inline-flex items-center gap-1"><MapPin size={11} /> {l.game?.location}</span>
+                    <span className="inline-flex items-center gap-1"><Clock size={11} /> {l.game?.durationLabel}</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-white/40">Logged {timeAgo(l.loggedAt)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
-}
-
-function SectionTitle({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <h2 className={`mb-3 text-lg font-bold ${className}`}>{children}</h2>;
 }

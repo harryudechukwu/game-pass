@@ -17,8 +17,8 @@ const nav = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/games", label: "Games", icon: Gamepad2 },
   { href: "/admin/rewards", label: "Rewards", icon: Trophy },
-  { href: "/admin/customers", label: "Customers", icon: Users },
-  { href: "/admin/sessions", label: "Sessions", icon: Activity },
+  { href: "/admin/players", label: "Players", icon: Users },
+  { href: "/admin/logs", label: "Logs", icon: Activity },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
