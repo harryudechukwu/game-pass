@@ -8,7 +8,7 @@ export default function LandingPage() {
       href: "/home",
       icon: Gamepad2,
       title: "Player App",
-      desc: "Sign in with just your phone number to see the games you've played and redeem rewards.",
+      desc: "Sign in with just your phone to watch your live game timer, see what you've spent, and redeem rewards.",
       cta: "Open the app",
       accent: "from-[#58cc02] to-[#1cb0f6]",
     },
@@ -16,7 +16,7 @@ export default function LandingPage() {
       href: "/attendant",
       icon: ScanLine,
       title: "Attendant Console",
-      desc: "After a guest plays, pull them up by phone and log the game. It appears instantly in their app.",
+      desc: "Charge a game (₦1,000/hour) or sell an item — it starts the guest's countdown and adds to their spend.",
       cta: "Open attendant",
       accent: "from-[#1cb0f6] to-[#34d399]",
     },
@@ -24,7 +24,7 @@ export default function LandingPage() {
       href: "/admin",
       icon: ShieldCheck,
       title: "Operator Console",
-      desc: "Manage games, set milestone rewards, and see players and everything that's been logged.",
+      desc: "Manage games (Kids & Teens) and items, set spend-based rewards, and see revenue, players and logs.",
       cta: "Open admin",
       accent: "from-[#ffc800] to-[#f97316]",
     },
@@ -41,10 +41,10 @@ export default function LandingPage() {
           Game <span className="bg-gradient-to-r from-[#58cc02] to-[#1cb0f6] bg-clip-text text-transparent">Pass</span>
         </h1>
         <p className="mt-4 max-w-xl text-lg text-white/60">
-          Play real games at the venue. The attendant logs each one, and you unlock rewards as you go.
+          Buy game time or a treat at the desk. A timer starts on your phone, and everything you spend unlocks rewards.
         </p>
         <p className="mt-3 text-sm font-medium text-white/40">
-          Play a game → attendant logs it → unlock &amp; redeem rewards.
+          Buy a game or item → attendant logs it → your spend unlocks rewards.
         </p>
       </header>
 

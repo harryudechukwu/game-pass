@@ -1,59 +1,71 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { clsx } from "clsx";
 import { api } from "@/lib/client";
 import { timeAgo, clockTime } from "@/lib/format";
 import { Loading } from "@/components/ui";
+import { CatalogTile } from "@/components/CatalogIcon";
 
 type Log = {
   id: string;
-  loggedAt: string;
-  game: { name: string } | null;
-  player: { id?: string; firstName: string | null; phone: string };
-  attendantId: string | null;
+  kind: "game" | "item";
+  name: string;
+  icon: string;
+  amountLabel: string;
+  quantity: number;
+  createdAt: string;
+  player: { firstName: string | null; phone: string };
 };
+
+const FILTERS = ["all", "game", "item"] as const;
 
 export default function AdminLogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api<{ logs: Log[] }>("/api/admin/logs").then((r) => setLogs(r.logs)).finally(() => setLoading(false));
+  const load = useCallback(async (f: string) => {
+    const r = await api<{ logs: Log[] }>(`/api/admin/logs${f !== "all" ? `?kind=${f}` : ""}`);
+    setLogs(r.logs);
   }, []);
+
+  useEffect(() => { setLoading(true); load(filter).finally(() => setLoading(false)); }, [filter, load]);
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-black tracking-tight">Game logs</h1>
-        <p className="text-sm text-white/50">Every game an attendant has logged, newest first.</p>
+        <h1 className="text-2xl font-black tracking-tight">Purchase logs</h1>
+        <p className="text-sm text-white/50">Everything attendants have logged, newest first.</p>
+      </div>
+
+      <div className="flex gap-2">
+        {FILTERS.map((f) => (
+          <button key={f} onClick={() => setFilter(f)} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-gradient-to-r from-[#58cc02] to-[#1cb0f6] font-semibold text-black" : "bg-white/5 text-white/60 hover:bg-white/10")}>
+            {f === "all" ? "All" : `${f}s`}
+          </button>
+        ))}
       </div>
 
       {loading ? (
         <Loading />
       ) : logs.length === 0 ? (
-        <div className="card p-8 text-center text-white/40">Nothing logged yet.</div>
+        <div className="card p-8 text-center text-white/40">Nothing logged in this view.</div>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[560px] text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-white/40">
-                <th className="px-4 py-3 font-medium">Game</th>
-                <th className="px-4 py-3 font-medium">Player</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((l) => (
-                <tr key={l.id} className="border-b border-white/5 last:border-0">
-                  <td className="px-4 py-3 font-medium">{l.game?.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-white/70">{l.player.firstName ?? "—"}</td>
-                  <td className="px-4 py-3 text-white/50">{l.player.phone}</td>
-                  <td className="px-4 py-3 text-white/50" title={clockTime(l.loggedAt)}>{timeAgo(l.loggedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="card divide-y divide-white/5">
+          {logs.map((l) => (
+            <div key={l.id} className="flex items-center gap-3 px-4 py-3">
+              <CatalogTile name={l.icon} accent={l.kind === "item" ? "item" : "muted"} className="h-10 w-10" size={20} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{l.name}{l.kind === "item" && l.quantity > 1 ? ` ×${l.quantity}` : l.kind === "game" ? ` · ${l.quantity}h` : ""}</p>
+                <p className="text-xs text-white/45">{l.player.firstName ?? "—"} · {l.player.phone}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-white/80">{l.amountLabel}</p>
+                <p className="text-[11px] text-white/40" title={clockTime(l.createdAt)}>{timeAgo(l.createdAt)}</p>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

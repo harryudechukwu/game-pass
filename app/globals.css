@@ -291,3 +291,13 @@ input[type="number"]::-webkit-inner-spin-button {
 :root[data-theme="light"] .on-brand * {
   color: #ffffff !important;
 }
+
+/* Nav chrome (sidebar / bottom bar): solid surface that flips with the theme —
+   dark by default, white in light mode. Text uses text-white utilities so the
+   light-mode overrides above recolour it to dark ink automatically. */
+.chrome {
+  background-color: #0e1526;
+}
+:root[data-theme="light"] .chrome {
+  background-color: #ffffff;
+}

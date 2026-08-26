@@ -10,6 +10,7 @@ type Row = {
   id: string;
   phone: string;
   name: string | null;
+  spentLabel: string;
   gamesPlayed: number;
   redemptions: number;
   createdAt: string;
@@ -24,19 +25,14 @@ export default function AdminPlayersPage() {
     const r = await api<{ players: Row[] }>(`/api/admin/players${query ? `?q=${encodeURIComponent(query)}` : ""}`);
     setRows(r.players);
   }
-  useEffect(() => {
-    load().finally(() => setLoading(false));
-  }, []);
-  useEffect(() => {
-    const t = setTimeout(() => load(q), 250);
-    return () => clearTimeout(t);
-  }, [q]);
+  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  useEffect(() => { const t = setTimeout(() => load(q), 250); return () => clearTimeout(t); }, [q]);
 
   return (
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-black tracking-tight">Players</h1>
-        <p className="text-sm text-white/50">Everyone who&apos;s had a game logged or signed in.</p>
+        <p className="text-sm text-white/50">Ranked by amount spent.</p>
       </div>
 
       <div className="relative max-w-md">
@@ -56,14 +52,12 @@ export default function AdminPlayersPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{c.name ?? "Unnamed player"}</p>
-                <p className="text-xs text-white/45">{c.phone}</p>
+                <p className="text-xs text-white/45">{c.phone} · {c.gamesPlayed} games</p>
               </div>
-              {c.redemptions > 0 && (
-                <span className="pill bg-[#ffc800]/15 text-[#ffc800]"><Gift size={11} /> {c.redemptions}</span>
-              )}
+              {c.redemptions > 0 && <span className="pill bg-[#ffc800]/15 text-[#ffc800]"><Gift size={11} /> {c.redemptions}</span>}
               <div className="text-right">
-                <p className="font-bold">{c.gamesPlayed}</p>
-                <p className="text-[11px] text-white/40">games</p>
+                <p className="font-bold text-[#58cc02]">{c.spentLabel}</p>
+                <p className="text-[11px] text-white/40">spent</p>
               </div>
               <ChevronRight size={16} className="text-white/30" />
             </Link>

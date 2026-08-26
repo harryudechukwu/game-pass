@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { LayoutDashboard, Gamepad2, Trophy, Users, Activity, LogOut, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Gamepad2, ShoppingBag, Trophy, Users, Activity, LogOut, ShieldCheck } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading } from "@/components/ui";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -16,6 +16,7 @@ export const useAdmin = () => useContext(AdminCtx);
 const nav = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/games", label: "Games", icon: Gamepad2 },
+  { href: "/admin/items", label: "Items", icon: ShoppingBag },
   { href: "/admin/rewards", label: "Rewards", icon: Trophy },
   { href: "/admin/players", label: "Players", icon: Users },
   { href: "/admin/logs", label: "Logs", icon: Activity },

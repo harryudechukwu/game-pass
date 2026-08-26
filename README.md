@@ -1,40 +1,41 @@
-# 🕹️ Game Pass — Arcade Rewards (Demo)
+# 🕹️ Game Pass — Arcade Spend & Rewards (Demo)
 
-A mobile-first demo for a physical arcade. Guests play real games at the venue; an
-**attendant logs each game** they played, and the guest sees it in their app and
-**unlocks milestone rewards** the more they play.
+A mobile-first demo for a physical arcade. An **attendant** logs what a guest buys —
+either **game time** (₦1,000/hour, which starts a countdown on the guest's phone)
+or an **item** sold in the playground. Everything a guest spends unlocks **rewards**
+at spend milestones. Guests sign in with **just a phone number** to watch their live
+game timer, see what they've spent, and redeem rewards.
 
-> Play a game → attendant logs it → unlock &amp; redeem rewards.
+> Buy a game or item → attendant logs it → your spend unlocks rewards.
+
+## How a game purchase works
+
+1. Attendant charges the game (e.g. Racing Simulator, ₦1,000 × 1 hour) against the
+   guest's phone.
+2. The guest's phone shows a short **heads-up countdown** (default 60s — configurable
+   in admin) so they can walk to the game location…
+3. …then the **1-hour play timer** runs. The game **counts as played** when the hour
+   finishes. The **spend counts immediately**.
+4. Items (drinks, snacks, tokens, merch) are logged the same way but have no timer —
+   they just add to spend.
 
 ## Demo build — no server, no database
 
-Everything runs **in the browser** in `localStorage`. No backend, no database, no
-environment variables. The **player app**, the **attendant console** and the
-**admin console** all run in the same browser and share the same store, so the
-whole flow works on **one device** — open the player app and the attendant console
-in two tabs and watch a logged game appear live.
+Everything runs **in the browser** in `localStorage`. No backend, no env vars. The
+**player app**, **attendant console** and **admin console** share one browser store,
+so it all works on **one device** — open the player app and the attendant console in
+two tabs and watch a purchase (and its timer) appear live.
 
-## Three surfaces
+## Surfaces
 
 | Surface | URL | Who | Can do |
 |---|---|---|---|
-| **Player app** | `/home` | guests | log in with **just a phone number**; view games they've played; redeem unlocked rewards |
-| **Attendant console** | `/attendant` | venue staff | pull up a player by phone, pick the game, **log it** |
-| **Operator console** | `/admin` | operators | manage games, set milestone rewards, view players & logs |
+| **Player app** | `/home` | guests | phone-only sign-in; watch live game timers; see total spent; redeem rewards |
+| **Attendant** | `/attendant` | staff | look up a guest by phone; charge a game (₦/hr) or sell an item |
+| **Operator** | `/admin` | operators | games (Kids/Teen), items, spend rewards, players, logs, heads-up setting |
 
-Only the attendant can log a play. Players can only **view and redeem** — never
-log their own games.
-
-## The flow
-
-1. A guest plays a physical game at the venue.
-2. They go to the attendant, who finds them by phone and **logs the game** (this is
-   the only write of a play — a QR-based method can slot in behind the same action
-   later).
-3. It appears instantly on the player's home feed as a banner.
-4. Rewards are **milestones**: an admin sets "games needed" (e.g. play 5 games → one
-   free play). Once a player reaches the threshold, the reward becomes claimable;
-   redeeming reveals a **claim code** the attendant honours.
+Catalogue entries use **icons** (not images). The player app is a **left-sidebar app
+on desktop** and a **bottom-nav app on mobile**.
 
 ## Run it
 
@@ -43,32 +44,30 @@ npm install
 npm run dev      # http://localhost:3005
 ```
 
-The store seeds itself (games, rewards, admin accounts) on first load.
+Seeds itself (games in Kids/Teen categories, items, spend rewards, admin accounts).
 
 ### Demo access
-- **Player:** any phone number — no password; first time signs you up.
-- **Attendant:** open `/attendant` (no login in the demo) and log a game against a
-  phone number.
-- **Operator:** `admin@arcade.test` / `admin1234` (also `staff@arcade.test` /
-  `staff1234`).
+- **Player:** any phone number — no password.
+- **Attendant:** open `/attendant` (no login in the demo).
+- **Operator:** `admin@arcade.test` / `admin1234` (also `staff@arcade.test` / `staff1234`).
 
-Reset the demo in devtools: `localStorage.removeItem("gamepass_demo_v2")`.
+Reset the demo: `localStorage.removeItem("gamepass_demo_v3")`.
 
 ## Where the logic lives
 
 ```
-lib/local/store.ts   entities (players, games, gameLogs, rewards, redemptions),
-                     localStorage load/save + seed
-lib/local/api.ts     in-browser engine: phone login, player feed + rewards/redeem,
-                     attendant log-a-game, and the admin surface
-lib/client.ts        api() — dispatches page calls to the engine
-app/(app)/…          player app (home feed + rewards, mobile shell)
-app/attendant/…      attendant console
+lib/local/store.ts   entities (players, games w/ category+price, items, purchases
+                     w/ timers, spend rewards, settings) + seed
+lib/local/api.ts     engine: phone login, player home (spend + live sessions + feed),
+                     spend rewards, attendant purchase (game timer / item), admin
+components/CatalogIcon.tsx      icon registry + picker (no images)
+components/customer/SessionTimer.tsx   heads-up → play countdown
+app/(app)/…          player app (responsive: sidebar desktop / bottom-nav mobile)
+app/attendant/…      attendant console (two-column desktop)
 app/admin/…          operator console
 ```
 
 ## Deploy on Netlify
 
-No env vars, no database. Connect the GitHub repo in Netlify → it picks up
-`netlify.toml` (`next build` + the Next.js runtime plugin) → deploy. (Vercel or any
-Next host works too.)
+No env vars, no database. Connect the GitHub repo in Netlify → `netlify.toml` runs
+`next build` with the Next.js plugin → deploy. (Vercel or any Next host works too.)

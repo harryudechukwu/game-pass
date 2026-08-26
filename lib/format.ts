@@ -49,3 +49,14 @@ export function mmss(totalSeconds: number): string {
   const r = s % 60;
   return `${m}:${r.toString().padStart(2, "0")}`;
 }
+
+// H:MM:SS when there's an hour or more, otherwise M:SS.
+export function hms(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  return h > 0
+    ? `${h}:${m.toString().padStart(2, "0")}:${r.toString().padStart(2, "0")}`
+    : `${m}:${r.toString().padStart(2, "0")}`;
+}
