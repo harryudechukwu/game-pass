@@ -16,6 +16,7 @@ type Log = {
   quantity: number;
   createdAt: string;
   player: { firstName: string | null; phone: string };
+  attendant: string;
 };
 
 const FILTERS = ["all", "game", "item"] as const;
@@ -59,6 +60,10 @@ export default function AdminLogsPage() {
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{l.name}{l.kind === "item" && l.quantity > 1 ? ` ×${l.quantity}` : l.kind === "game" ? ` · ${l.quantity}h` : ""}</p>
                 <p className="text-xs text-white/45">{l.player.firstName ?? "—"} · {l.player.phone}</p>
+              </div>
+              <div className="hidden text-right sm:block">
+                <p className="text-xs font-medium text-white/60">by {l.attendant}</p>
+                <p className="text-[11px] text-white/40">attendant</p>
               </div>
               <div className="text-right">
                 <p className="font-bold text-white/80">{l.amountLabel}</p>

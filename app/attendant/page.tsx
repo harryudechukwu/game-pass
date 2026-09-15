@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ScanLine, Home, Check, UserPlus, Search, Gift, RotateCcw, Minus, Plus, Timer, ShoppingBag, Gamepad2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ScanLine, Check, UserPlus, Search, Gift, RotateCcw, Minus, Plus, Timer, ShoppingBag, Gamepad2, LogOut } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { money, timeAgo } from "@/lib/format";
 import { Spinner, ErrorNote } from "@/components/ui";
@@ -33,6 +33,9 @@ export default function AttendantPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [me, setMe] = useState<{ name: string } | null>(null);
+  const [itemQuery, setItemQuery] = useState("");
+  const router = useRouter();
 
   const loadStatic = useCallback(async () => {
     const [c, rec] = await Promise.all([
@@ -45,7 +48,16 @@ export default function AttendantPage() {
     setRecent(rec.purchases);
   }, []);
 
-  useEffect(() => { loadStatic(); }, [loadStatic]);
+  useEffect(() => {
+    api<{ attendant: { name: string } }>("/api/attendant/me")
+      .then((r) => { setMe(r.attendant); return loadStatic(); })
+      .catch((e) => { if (e instanceof ApiClientError && e.status === 401) router.replace("/attendant/login"); });
+  }, [loadStatic, router]);
+
+  async function logout() {
+    await api("/api/attendant/logout", { method: "POST" }).catch(() => {});
+    router.replace("/attendant/login");
+  }
 
   useEffect(() => {
     if (phone.replace(/\s+/g, "").length < 6) { setLookup(null); return; }
@@ -53,7 +65,9 @@ export default function AttendantPage() {
     return () => clearTimeout(t);
   }, [phone]);
 
-  const list = mainTab === "items" ? items : games;
+  const list = mainTab === "items"
+    ? items.filter((i) => i.name.toLowerCase().includes(itemQuery.trim().toLowerCase()))
+    : games;
   const total = selected ? selected.ref.priceKobo * qty : 0;
 
   async function charge() {
@@ -93,9 +107,10 @@ export default function AttendantPage() {
               <p className="text-xs text-white/40">Log a game or an item a guest bought</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {me && <span className="hidden text-sm font-semibold text-white/60 sm:inline">{me.name}</span>}
             <ThemeToggle />
-            <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white"><Home size={16} /> Exit</Link>
+            <button onClick={logout} className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white"><LogOut size={16} /> Sign out</button>
           </div>
         </div>
       </div>
@@ -145,7 +160,13 @@ export default function AttendantPage() {
                     </button>
                   ))}
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {mainTab === "items" && (
+                  <div className="relative mb-3 mt-3">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                    <input className="input pl-9" placeholder="Search items…" value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} />
+                  </div>
+                )}
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {list.map((c) => {
                     const sel = selected?.ref.id === c.id;
                     return (
