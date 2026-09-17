@@ -75,7 +75,7 @@ export default function AdminDashboard() {
                   <div key={g.gameId} className="flex items-center gap-3">
                     <span className="w-5 text-sm font-bold text-white/40">{i + 1}</span>
                     <span className="w-40 shrink-0 truncate text-sm font-medium">{g.name}</span>
-                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-[#58cc02] to-[#1cb0f6]" style={{ width: `${(g.plays / max) * 100}%` }} /></div>
+                    <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-[#2f6bff] to-[#1cb0f6]" style={{ width: `${(g.plays / max) * 100}%` }} /></div>
                     <span className="w-10 text-right text-sm font-bold">{g.plays}</span>
                   </div>
                 );

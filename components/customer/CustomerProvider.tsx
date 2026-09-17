@@ -4,11 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { LogOut, Home, Gift, Gamepad2, Wallet } from "lucide-react";
+import { LogOut, RefreshCw } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
-import { Loading } from "@/components/ui";
-import { BottomNav } from "@/components/customer/BottomNav";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Icon } from "@/components/Icon";
 
 export type Player = { id: string; phone: string; name: string | null; firstName: string | null };
 
@@ -29,95 +27,113 @@ export function useCustomer(): Ctx {
 }
 
 const NAV = [
-  { href: "/home", label: "My Games", icon: Home },
-  { href: "/rewards", label: "Rewards", icon: Gift },
+  { href: "/home", label: "Home", icon: "home" as const },
+  { href: "/rewards", label: "Rewards", icon: "gift" as const },
 ];
 
 export function CustomerProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [state, setState] = useState<Omit<Ctx, "refresh"> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const res = await api<{ player: Player; spentKobo: number; spentLabel: string; activeSessions: number; claimable: number }>("/api/me");
       setState({ player: res.player, spentKobo: res.spentKobo, spentLabel: res.spentLabel, activeSessions: res.activeSessions, claimable: res.claimable });
+      setError(null);
     } catch (e) {
       if (e instanceof ApiClientError && e.status === 401) { router.replace("/login"); return; }
       throw e;
     }
   }, [router]);
 
-  useEffect(() => {
-    refresh().finally(() => setLoading(false));
-    const t = setInterval(() => refresh().catch(() => {}), 4000);
-    return () => clearInterval(t);
+  const attempt = useCallback(() => {
+    setLoading(true);
+    refresh()
+      .catch((e) => setError(e instanceof ApiClientError ? e.message : "We couldn't reach the server. Check your connection and try again."))
+      .finally(() => setLoading(false));
   }, [refresh]);
 
-  if (loading || !state) return <div className="mx-auto max-w-md"><Loading label="Loading…" /></div>;
+  useEffect(() => {
+    attempt();
+    const t = setInterval(() => refresh().catch(() => {}), 4000);
+    return () => clearInterval(t);
+  }, [attempt, refresh]);
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" }).catch(() => {});
     router.replace("/login");
   }
 
+  if (loading && !state) {
+    return (
+      <div className="gp-app gp-app--brand" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 10, color: "rgba(255,255,255,.85)", fontWeight: 600 }}>
+          <RefreshCw size={18} className="animate-spin" /> Loading…
+        </div>
+      </div>
+    );
+  }
+  if (!state) {
+    return (
+      <div className="gp-app gp-app--brand gp-signin">
+        <div className="gp-logohex"><Icon name="joystick" size={44} /></div>
+        <div>
+          <p style={{ fontWeight: 700, fontSize: 17 }}>Can’t load your games right now</p>
+          <p className="gp-hint" style={{ marginTop: 4 }}>{error ?? "The server didn’t respond. Please try again."}</p>
+        </div>
+        <button onClick={attempt} className="gp-cta" style={{ width: "auto", padding: "12px 18px", display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <RefreshCw size={15} /> Try again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <CustomerCtx.Provider value={{ ...state, refresh }}>
-      <div className="min-h-screen md:flex">
-        {/* Desktop sidebar (theme-aware chrome: white in light, dark in dark) */}
-        <aside className="chrome sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 p-4 md:flex">
-          <Link href="/home" className="mb-8 flex items-center gap-2 px-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#58cc02] to-[#1cb0f6] text-black"><Gamepad2 size={18} /></span>
-            <span className="font-black">Game Pass</span>
-          </Link>
-          <nav className="flex-1 space-y-1">
-            {NAV.map((n) => <DesktopNavLink key={n.href} {...n} badge={n.href === "/rewards" ? state.claimable : 0} />)}
+      <div className="gp-app gp-app--shell">
+        <aside className="gp-sidebar">
+          <div className="gp-side-logo"><Icon name="joystick" size={26} /> Game Pass</div>
+          <nav className="gp-side-nav">
+            {NAV.map((n) => {
+              const active = pathname === n.href;
+              return (
+                <Link key={n.href} href={n.href} className={clsx("gp-side-link", active && "gp-side-link--on")}>
+                  <Icon name={n.icon} size={22} /> {n.label}
+                  {n.href === "/rewards" && state.claimable > 0 && <span className="gp-badge">{state.claimable}</span>}
+                </Link>
+              );
+            })}
           </nav>
-          <div className="border-t border-white/10 pt-3">
-            <div className="flex items-center justify-between px-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold text-white">{state.player.firstName ?? state.player.phone}</p>
-                <p className="truncate text-xs text-white/40">{state.player.phone}</p>
-              </div>
-              <ThemeToggle />
-            </div>
-            <button onClick={logout} className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white">
-              <LogOut size={16} /> Sign out
-            </button>
+          <div className="gp-side-foot">
+            <button className="gp-side-signout" onClick={logout}><LogOut size={17} /> Sign out</button>
           </div>
         </aside>
 
-        {/* Mobile header */}
-        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/10 bg-[#0a0e1a]/80 px-4 py-3 backdrop-blur md:hidden">
-          <div className="min-w-0">
-            <p className="text-xs text-white/45">Signed in</p>
-            <p className="truncate text-sm font-semibold">Hi, {state.player.firstName ?? state.player.phone} 👋</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <button onClick={logout} aria-label="Sign out" className="rounded-full border border-white/10 bg-white/5 p-2 text-white/50 hover:text-white">
-              <LogOut size={16} />
-            </button>
-          </div>
-        </header>
+        <div className="gp-main">
+          <button className="gp-signout" onClick={logout} aria-label="Sign out"><LogOut size={17} /></button>
+          {children}
+        </div>
 
-        <main className="min-w-0 flex-1">
-          <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-4 md:px-8 md:pb-10 md:pt-8">{children}</div>
-        </main>
-
-        <BottomNav claimable={state.claimable} />
+        <nav className="gp-dock">
+          <div className="gp-dock-inner">
+            <div className="gp-navpill">
+              {NAV.map((n) => {
+                const active = pathname === n.href;
+                return (
+                  <Link key={n.href} href={n.href} className={clsx("gp-navb", active && "gp-navb--on")}>
+                    {n.href === "/rewards" && state.claimable > 0 && <span className="gp-badge">{state.claimable}</span>}
+                    <Icon name={n.icon} size={24} />
+                    {n.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </nav>
       </div>
     </CustomerCtx.Provider>
-  );
-}
-
-function DesktopNavLink({ href, label, icon: Icon, badge }: { href: string; label: string; icon: React.ComponentType<{ size?: number }>; badge: number }) {
-  const pathname = usePathname();
-  const active = pathname === href;
-  return (
-    <Link href={href} className={clsx("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold transition", active ? "bg-[#58cc02]/15 text-white" : "text-white/55 hover:bg-white/5 hover:text-white")}>
-      <Icon size={18} /> {label}
-      {badge > 0 && <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ff4b4b] px-1.5 text-[11px] font-black text-white">{badge}</span>}
-    </Link>
   );
 }

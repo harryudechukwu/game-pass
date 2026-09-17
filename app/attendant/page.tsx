@@ -6,7 +6,6 @@ import { ScanLine, Check, UserPlus, Search, Gift, RotateCcw, Minus, Plus, Timer,
 import { api, ApiClientError } from "@/lib/client";
 import { money, timeAgo } from "@/lib/format";
 import { Spinner, ErrorNote } from "@/components/ui";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { CatalogTile } from "@/components/CatalogIcon";
 
 type Cat = { id: string; name: string; icon: string; priceKobo: number; priceLabel: string; category?: string; location?: string; durationMinutes?: number };
@@ -101,7 +100,7 @@ export default function AttendantPage() {
       <div className="border-b border-white/10 bg-black/30">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#58cc02] to-[#1cb0f6] text-black"><ScanLine size={22} /></div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#2f6bff] to-[#1cb0f6] text-white"><ScanLine size={22} /></div>
             <div>
               <p className="font-black tracking-tight">Attendant Console</p>
               <p className="text-xs text-white/40">Log a game or an item a guest bought</p>
@@ -109,7 +108,6 @@ export default function AttendantPage() {
           </div>
           <div className="flex items-center gap-3">
             {me && <span className="hidden text-sm font-semibold text-white/60 sm:inline">{me.name}</span>}
-            <ThemeToggle />
             <button onClick={logout} className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white"><LogOut size={16} /> Sign out</button>
           </div>
         </div>
@@ -145,7 +143,7 @@ export default function AttendantPage() {
                     {lookup.found && lookup.player ? (
                       <span className="pill bg-emerald-500/15 text-emerald-300"><Check size={13} /> Registered · spent {lookup.player.spentLabel}</span>
                     ) : (
-                      <span className="pill bg-[#58cc02]/15 text-[#58cc02]"><UserPlus size={13} /> New guest · identified by phone</span>
+                      <span className="pill bg-[#2f6bff]/15 text-[#2f6bff]"><UserPlus size={13} /> New guest · identified by phone</span>
                     )}
                   </div>
                 )}
@@ -155,7 +153,7 @@ export default function AttendantPage() {
                 <h2 className="mb-3 font-bold">2 · What did they buy?</h2>
                 <div className="mb-3 flex flex-wrap gap-2">
                   {MAIN_TABS.map((t) => (
-                    <button key={t.key} onClick={() => setMainTab(t.key)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ${mainTab === t.key ? "bg-gradient-to-r from-[#58cc02] to-[#1cb0f6] font-semibold text-black" : "bg-white/5 text-white/60 hover:bg-white/10"}`}>
+                    <button key={t.key} onClick={() => setMainTab(t.key)} className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm ${mainTab === t.key ? "bg-gradient-to-r from-[#2f6bff] to-[#1cb0f6] font-semibold text-white" : "bg-white/5 text-white/60 hover:bg-white/10"}`}>
                       <t.icon size={14} /> {t.label}
                     </button>
                   ))}
@@ -170,8 +168,8 @@ export default function AttendantPage() {
                   {list.map((c) => {
                     const sel = selected?.ref.id === c.id;
                     return (
-                      <button key={c.id} onClick={() => pick(mainTab === "items" ? "item" : "game", c)} className={`relative rounded-2xl border-2 p-3 text-left transition ${sel ? "border-[#7bed3a] bg-[#58cc02]/10 shadow-[0_0_0_2px_#7bed3a]" : "border-white/10 hover:border-white/25"}`}>
-                        {sel && <span className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#58cc02] text-black shadow"><Check size={13} /></span>}
+                      <button key={c.id} onClick={() => pick(mainTab === "items" ? "item" : "game", c)} className={`relative rounded-2xl border-2 p-3 text-left transition ${sel ? "border-[#6c9bff] bg-[#2f6bff]/10 shadow-[0_0_0_2px_#6c9bff]" : "border-white/10 hover:border-white/25"}`}>
+                        {sel && <span className="absolute right-2 top-2 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#2f6bff] text-white shadow"><Check size={13} /></span>}
                         <CatalogTile name={c.icon} accent={mainTab === "items" ? "item" : c.category === "kids" ? "kids" : "teen"} className="mb-2 h-11 w-11" size={22} />
                         <p className="truncate text-sm font-semibold">{c.name}</p>
                         <p className="text-xs text-white/45">{c.priceLabel}{mainTab !== "items" ? "/hr" : ""}</p>
@@ -209,7 +207,7 @@ export default function AttendantPage() {
                     </div>
                     <div className="flex items-center justify-between border-t border-white/10 pt-3">
                       <span className="font-semibold">Total</span>
-                      <span className="text-xl font-black text-[#58cc02]">{money(total, "NGN")}</span>
+                      <span className="text-xl font-black text-[#2f6bff]">{money(total, "NGN")}</span>
                     </div>
                     {selected.kind === "game" && (
                       <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Player gets a {headsUp}s heads-up, then {qty} hour{qty > 1 ? "s" : ""} of play time.</p>

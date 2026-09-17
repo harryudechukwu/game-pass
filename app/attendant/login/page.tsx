@@ -32,7 +32,7 @@ export default function AttendantLoginPage() {
       <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-white/50 hover:text-white">
         <ArrowLeft size={16} /> Home
       </Link>
-      <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#58cc02] to-[#1cb0f6] text-black">
+      <div className="mb-6 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2f6bff] to-[#1cb0f6] text-white">
         <ScanLine size={28} />
       </div>
       <h1 className="text-2xl font-black">Attendant sign-in</h1>

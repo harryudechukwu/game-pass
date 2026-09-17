@@ -32,14 +32,14 @@ export default function PlayerDetailPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#58cc02] to-[#1cb0f6] text-xl font-black text-black">{(p.name ?? p.phone).slice(0, 1).toUpperCase()}</div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2f6bff] to-[#1cb0f6] text-xl font-black text-white">{(p.name ?? p.phone).slice(0, 1).toUpperCase()}</div>
           <div>
             <h1 className="text-2xl font-black">{p.name ?? "Unnamed player"}</h1>
             <p className="text-sm text-white/50">{p.phone} · {p.gamesPlayed} games · joined {timeAgo(p.createdAt)}</p>
           </div>
         </div>
         <div className="text-right">
-          <p className="inline-flex items-center gap-2 text-3xl font-black text-[#58cc02]"><Wallet size={24} /> {p.spentLabel}</p>
+          <p className="inline-flex items-center gap-2 text-3xl font-black text-[#2f6bff]"><Wallet size={24} /> {p.spentLabel}</p>
           <p className="text-xs text-white/45">total spent</p>
         </div>
       </div>

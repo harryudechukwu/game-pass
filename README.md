@@ -37,28 +37,31 @@ rewards.
 
 ## Run it locally
 
-Needs a MongoDB instance. With a local `mongod` running (default
-`mongodb://localhost:27017`):
+Needs a MongoDB instance. `MONGODB_URI` is **required** — there is no localhost
+fallback. Point it at the same MongoDB Atlas cluster you use in production (so
+local dev and live share data) or at a local `mongod`.
 
 ```bash
 npm install
 npm run dev        # http://localhost:3005
 ```
 
-The database **seeds itself** on first request (2 games — Kids Games & Teens Games,
-items, spend rewards, admin accounts, settings).
+The database **seeds itself** on first request with the operator + attendant
+logins and default settings. Add games, items, and rewards from the operator
+console (`/admin`).
 
 Config (`.env`):
 ```
-MONGODB_URI="mongodb://localhost:27017"
+# Atlas (shared with production) or a local mongod — required, no default.
+MONGODB_URI="mongodb+srv://user:pass@cluster.xxxx.mongodb.net"
 MONGODB_DB="gamepass"
 AUTH_SECRET="a-random-32-byte-string"
 ```
 
-### Demo access
+### Seeded logins
 - **Player:** any phone number — no password.
-- **Attendant:** open `/attendant` (no login in the demo).
-- **Operator:** `admin@arcade.test` / `admin1234` (also `staff@arcade.test` / `staff1234`).
+- **Attendant:** `/attendant` — `frontdesk` / `attend1234`.
+- **Operator:** `/admin` — `admin@arcade.test` / `admin1234` (also `staff@arcade.test` / `staff1234`).
 
 ## Where the code lives
 
@@ -88,5 +91,12 @@ app/(app)/…             player app     app/attendant/…  attendant     app/ad
    - `AUTH_SECRET` — a random 32-byte string
 4. **Deploy.** The DB seeds itself on first request. Sign in at `/admin` with
    `admin@arcade.test` / `admin1234`.
+
+> **Troubleshooting.** If the app returns 500s / "Something went wrong" and the
+> logs show a TLS `alert number 80` (`tlsv1 alert internal error`), the Atlas
+> cluster is almost certainly **paused** (free M0 clusters auto-pause after ~60
+> days) or the connection string points at a deleted/renamed cluster. Resume or
+> recreate it in the Atlas dashboard, update `MONGODB_URI`, and confirm the IP
+> access list allows your dev machine and the host's egress.
 
 (Also deploys to Vercel or any Node host — it's a standard Next.js app.)
