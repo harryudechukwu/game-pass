@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Gift, ArrowRight, Trophy, MapPin, Timer, ShoppingBag } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { api } from "@/lib/client";
 import { timeAgo } from "@/lib/format";
 import { useCustomer } from "@/components/customer/CustomerProvider";
-import { CatalogTile } from "@/components/CatalogIcon";
 import { SessionTimer } from "@/components/customer/SessionTimer";
-import { Loading } from "@/components/ui";
+import { Icon, iconFor } from "@/components/Icon";
 
 type Purchase = {
   id: string;
@@ -34,113 +33,100 @@ type HomeData = {
 };
 
 export default function HomePage() {
-  const { refresh } = useCustomer();
+  const { player, refresh } = useCustomer();
   const [data, setData] = useState<HomeData | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setData(await api<HomeData>("/api/home"));
   }, []);
 
   useEffect(() => {
-    load().finally(() => setLoading(false));
+    load().catch(() => {});
     const t = setInterval(() => { load().catch(() => {}); refresh().catch(() => {}); }, 4000);
     return () => clearInterval(t);
   }, [load, refresh]);
 
-  if (loading || !data) return <Loading label="Loading…" />;
-
-  const feed = data.purchases.filter((p) => !(p.kind === "game" && p.sessionStatus !== "completed"));
+  const spentLabel = data?.spentLabel ?? "₦0";
+  const feed = (data?.purchases ?? []).filter((p) => !(p.kind === "game" && p.sessionStatus !== "completed"));
 
   return (
-    <div className="space-y-6">
-      <div className="hidden items-end justify-between md:flex">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">My Games</h1>
-          <p className="text-sm text-white/50">{data.gamesPlayed} completed · spend more to unlock rewards</p>
+    <>
+      <header className="gp-head">
+        <div className="gp-hi">Welcome to Gacia{player.firstName ? `, ${player.firstName}` : ""}</div>
+        <div style={{ marginTop: 16 }}>
+          <div className="gp-eyebrow">Total spent in store</div>
+          <div className="gp-big">{spentLabel}</div>
+          <div className="gp-head-sub">
+            {data ? `${data.gamesPlayed} games completed — keep going to unlock rewards` : "Loading your games…"}
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Total spent — full-width in the main container on all screens */}
-      <section className="on-brand relative overflow-hidden rounded-3xl border-2 border-[#46a302] bg-gradient-to-br from-[#58cc02] to-[#43a600] p-6 shadow-[0_6px_0_0_#3c9200]">
-        <p className="text-sm font-bold uppercase tracking-wide text-white/80">Total spent</p>
-        <div className="mt-1 flex items-end gap-2">
-          <span className="text-5xl font-black tracking-tight text-white drop-shadow-sm md:text-6xl">{data.spentLabel}</span>
-        </div>
-        <p className="mt-1 text-sm text-white/80">{data.gamesPlayed} games completed at the venue.</p>
-      </section>
+      <div className="gp-sheet">
+        {data && data.claimable.length > 0 && (
+          <div className="gp-sec">
+            <div className="gp-sec-head"><span className="gp-sec-title">Rewards ready</span><span className="gp-chip">{data.claimable.length}</span></div>
+            <Link href="/rewards" className="gp-row" style={{ textDecoration: "none" }}>
+              <div className="gp-hex gp-hex--g"><Icon name="gift" /></div>
+              <div className="gp-rmain">
+                <div className="gp-name">{data.claimable.length === 1 ? "You’ve unlocked a reward" : `${data.claimable.length} rewards unlocked`}</div>
+                <div className="gp-meta">{data.claimable.map((c) => c.name).join(", ")} · tap to redeem</div>
+              </div>
+              <ChevronRight size={18} color="var(--gp-sub)" />
+            </Link>
+          </div>
+        )}
 
-      {/* Claimable + progress — full width, stacked */}
-      {data.claimable.length > 0 && (
-        <Link href="/rewards" className="flex items-center gap-3 rounded-2xl border-2 border-[#ffc800]/40 bg-[#ffc800]/10 p-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#ffc800]/20 text-[#ffc800]"><Gift size={22} /></div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold">{data.claimable.length === 1 ? "You've unlocked a reward!" : `${data.claimable.length} rewards unlocked!`}</p>
-            <p className="truncate text-xs text-white/60">{data.claimable.map((c) => c.name).join(", ")} · tap to redeem</p>
+        {data?.nextReward && (
+          <div className="gp-sec">
+            <div className="gp-sec-head"><span className="gp-sec-title">Rewards</span><span className="gp-chip gp-chip--go">{data.nextReward.remainingLabel} to go</span></div>
+            <div className="gp-row">
+              <div className="gp-hex gp-hex--g gp-hex--lg"><Icon name="trophy" size={26} /></div>
+              <div className="gp-rmain">
+                <div className="gp-name">{data.nextReward.name}</div>
+                <div className="gp-meta">{spentLabel} / {data.nextReward.spendRequiredLabel}</div>
+                <div className="gp-pbar gp-pbar--slim"><i style={{ width: `${data.nextReward.progressPct}%` }} /></div>
+              </div>
+            </div>
           </div>
-          <ArrowRight className="text-[#ffc800]" size={18} />
-        </Link>
-      )}
-      {data.nextReward && (
-        <section className="card p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="inline-flex items-center gap-1.5 text-sm font-semibold"><Trophy size={15} className="text-[#ffc800]" /> Next reward: {data.nextReward.name}</span>
-            <span className="text-xs text-white/50">{data.nextReward.spendRequiredLabel}</span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-gradient-to-r from-[#58cc02] to-[#1cb0f6] transition-all" style={{ width: `${data.nextReward.progressPct}%` }} />
-          </div>
-          <p className="mt-2 text-xs text-white/55">Spend {data.nextReward.remainingLabel} more to unlock it.</p>
-        </section>
-      )}
+        )}
 
-      {/* Active sessions */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><Timer size={18} className="text-[#58cc02]" /> Active now</h2>
-        {data.activeSessions.length === 0 ? (
-          <div className="card p-6 text-center text-sm text-white/50">
-            No active game. When you buy a game at the desk, the countdown shows up here.
-          </div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {data.activeSessions.map((p) => (
-              <div key={p.id} className="card space-y-3 p-4">
-                <div className="flex items-center gap-3">
-                  <CatalogTile name={p.icon} accent="teen" className="h-12 w-12" size={24} />
-                  <div className="min-w-0">
-                    <p className="truncate font-bold">{p.name}</p>
-                    <p className="inline-flex items-center gap-1 text-xs text-white/45"><MapPin size={11} /> {p.location}</p>
-                  </div>
+        <div className="gp-sec">
+          <div className="gp-sec-head"><span className="gp-sec-title">Games</span>{data && data.activeSessions.length > 0 && <span className="gp-chip">{data.activeSessions.length}</span>}</div>
+          {data && data.activeSessions.length > 0 ? (
+            data.activeSessions.map((p) => (
+              <div key={p.id} className="gp-row">
+                <div className="gp-hex gp-hex--b"><Icon name="timer" /></div>
+                <div className="gp-rmain">
+                  <div className="gp-name">{p.name}</div>
+                  <div className="gp-meta">{p.location ?? "At the venue"}</div>
                 </div>
                 <SessionTimer headsUpEndsAt={p.headsUpEndsAt} mainEndsAt={p.mainEndsAt} />
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            ))
+          ) : (
+            <div className="gp-card"><span className="gp-empty-ic"><Icon name="timer" size={26} /></span><span>No active game. When you buy a game at the desk, the countdown shows up here.</span></div>
+          )}
+        </div>
 
-      {/* Purchases feed */}
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-bold"><ShoppingBag size={18} className="text-white/70" /> Recent purchases</h2>
-        {feed.length === 0 ? (
-          <div className="card p-6 text-center text-sm text-white/50">Nothing yet. Games you finish and items you buy will appear here.</div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {feed.map((p) => (
-              <div key={p.id} className="card flex items-center gap-3 p-3">
-                <CatalogTile name={p.icon} accent={p.kind === "item" ? "item" : "muted"} className="h-12 w-12" size={22} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold">{p.name}{p.kind === "item" && p.quantity > 1 ? ` ×${p.quantity}` : ""}</p>
-                  <p className="text-xs text-white/40">
-                    {p.kind === "game" ? "Game · played" : "Item"} · {timeAgo(p.createdAt)}
-                  </p>
+        <div className="gp-sec">
+          <div className="gp-sec-head"><span className="gp-sec-title">Recent</span></div>
+          {feed.length > 0 ? (
+            feed.slice(0, 12).map((p) => (
+              <div key={p.id} className="gp-row">
+                <div className="gp-hex"><Icon name={iconFor(p.icon, p.kind)} /></div>
+                <div className="gp-rmain">
+                  <div className="gp-name">{p.name}{p.kind === "item" && p.quantity > 1 ? ` ×${p.quantity}` : ""}</div>
+                  <div className="gp-meta">{p.kind === "game" ? "Game" : "Item"} · {timeAgo(p.createdAt)}</div>
                 </div>
-                <span className="shrink-0 text-sm font-bold text-white/80">{p.amountLabel}</span>
+                <span className="gp-amt">{p.amountLabel}</span>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+            ))
+          ) : (
+            <div className="gp-card"><span className="gp-empty-ic"><Icon name="bag" size={26} /></span><span>Nothing yet. Games you finish and items you buy show up here.</span></div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

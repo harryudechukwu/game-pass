@@ -6,7 +6,6 @@ import Link from "next/link";
 import { ShieldCheck, ArrowLeft } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { Spinner, ErrorNote } from "@/components/ui";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -30,7 +29,6 @@ export default function AdminLoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6">
-      <ThemeToggle floating />
       <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-white/50 hover:text-white">
         <ArrowLeft size={16} /> Home
       </Link>

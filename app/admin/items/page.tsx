@@ -108,7 +108,7 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
           <div><label className="label">Description</label><input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="label">Price (₦)</label><input type="number" className="input" value={form.priceNaira} onChange={(e) => setForm({ ...form, priceNaira: e.target.value as never })} /></div>
           <div><label className="label">Icon</label><IconPicker value={form.icon} onChange={(v) => setForm({ ...form, icon: v })} /></div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#58cc02]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#2f6bff]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>

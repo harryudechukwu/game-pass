@@ -61,7 +61,7 @@ export default function AdminGamesPage() {
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <StatusPill status={g.status} />
                   <span className="pill bg-white/5 text-white/60 capitalize">{g.category}</span>
-                  <span className="pill bg-[#58cc02]/15 text-[#58cc02]">{g.priceLabel}/hr</span>
+                  <span className="pill bg-[#2f6bff]/15 text-[#2f6bff]">{g.priceLabel}/hr</span>
                 </div>
               </div>
             </div>

@@ -41,7 +41,7 @@ export default function AdminAttendantsPage() {
         {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No attendants yet.</p>}
         {rows.map((a) => (
           <div key={a.id} className="flex items-center gap-4 px-4 py-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#58cc02] to-[#1cb0f6] text-black"><ScanLine size={18} /></div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#2f6bff] to-[#1cb0f6] text-white"><ScanLine size={18} /></div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{a.name}</p>
               <p className="text-xs text-white/45">@{a.username} · added {timeAgo(a.createdAt)}</p>

@@ -42,7 +42,7 @@ export default function AdminLogsPage() {
 
       <div className="flex gap-2">
         {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-gradient-to-r from-[#58cc02] to-[#1cb0f6] font-semibold text-black" : "bg-white/5 text-white/60 hover:bg-white/10")}>
+          <button key={f} onClick={() => setFilter(f)} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-gradient-to-r from-[#2f6bff] to-[#1cb0f6] font-semibold text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
             {f === "all" ? "All" : `${f}s`}
           </button>
         ))}

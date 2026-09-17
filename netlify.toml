@@ -1,7 +1,14 @@
 # Netlify build configuration.
-# The app is client-only (no server, no database) — all state lives in the
-# visitor's browser (localStorage). The official Next.js runtime is auto-installed
-# and handles routing/SSR of the client shell. No environment variables needed.
+# This is a full Next.js app backed by MongoDB (MongoDB Atlas). The serverless
+# functions connect to the database at request time, so you MUST set these
+# environment variables in Netlify (Site settings → Environment variables) —
+# they are intentionally not stored in this file:
+#   MONGODB_URI  — Atlas SRV string (mongodb+srv://user:pass@cluster.xxxx.mongodb.net)
+#   MONGODB_DB   — database name (e.g. gamepass)
+#   AUTH_SECRET  — random 32+ byte string used to sign session cookies
+# Also: in Atlas → Network Access allow Netlify's egress (0.0.0.0/0 is simplest),
+# and remember free-tier (M0) clusters auto-pause after inactivity — resume them
+# in the Atlas dashboard if the app starts returning 500s.
 
 [build]
   command = "next build"

@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft, Gamepad2 } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
-import { Spinner, ErrorNote } from "@/components/ui";
+import { Icon } from "@/components/Icon";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,42 +25,36 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-10">
-      <Link href="/" className="mb-10 inline-flex items-center gap-2 text-sm text-white/50 hover:text-white">
-        <ArrowLeft size={16} /> Home
-      </Link>
-
-      <div className="mb-8">
-        <div className="mb-5 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#58cc02] to-[#1cb0f6] text-black">
-          <Gamepad2 size={28} />
-        </div>
-        <h1 className="text-3xl font-black tracking-tight">Welcome to Game Pass</h1>
-        <p className="mt-2 text-white/55">Enter your phone number to see your games and rewards.</p>
-      </div>
-
-      {error && <div className="mb-4"><ErrorNote message={error} /></div>}
-
-      <form onSubmit={submit} className="space-y-4">
+    <main className="gp-app gp-app--brand">
+      <form onSubmit={submit} className="gp-signin">
+        <div className="gp-logohex"><Icon name="joystick" size={44} /></div>
         <div>
-          <label className="label" htmlFor="phone">Phone number</label>
+          <div className="gp-brand">GAME PASS</div>
+          <div className="gp-brand-sub">Play · Shop · Win</div>
+        </div>
+
+        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 11, marginTop: 6 }}>
+          {error && <div className="gp-hint" style={{ color: "#ffd9d9", fontWeight: 600 }}>{error}</div>}
+          <label htmlFor="phone" className="gp-hint" style={{ textAlign: "left", fontWeight: 700 }}>Your phone number</label>
           <input
             id="phone"
-            className="input text-lg"
+            className="gp-input"
             inputMode="tel"
             autoComplete="tel"
-            placeholder="e.g. 08012345678"
+            placeholder="0801 234 5678"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             required
             autoFocus
           />
+          <button className="gp-cta" disabled={busy || phone.replace(/\s+/g, "").length < 6}>
+            {busy ? "Signing in…" : "Start playing"}
+          </button>
         </div>
-        <button className="btn-primary w-full py-4 text-base" disabled={busy || phone.length < 6}>
-          {busy ? <Spinner /> : "Continue"}
-        </button>
-        <p className="text-center text-xs text-white/40">
-          No password needed. First time? You&apos;re in as soon as you continue.
-        </p>
+
+        <div className="gp-hint" style={{ maxWidth: "32ch" }}>
+          No password — just your phone. Your spend, games and rewards follow the number.
+        </div>
       </form>
     </main>
   );

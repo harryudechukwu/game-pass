@@ -104,7 +104,7 @@ function RewardForm({ initial, onClose, onSaved }: { initial: Partial<Reward>; o
           <div><label className="label">Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Free Game Token" /></div>
           <div><label className="label">Description</label><input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="label">Spend required to unlock (₦)</label><input type="number" min={1} className="input" value={form.spendNaira} onChange={(e) => setForm({ ...form, spendNaira: e.target.value as never })} /></div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#58cc02]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#2f6bff]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>

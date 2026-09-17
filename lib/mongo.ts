@@ -2,15 +2,34 @@ import { MongoClient, type Db } from "mongodb";
 import { nanoid } from "nanoid";
 import type { Admin, Attendant, Settings } from "@/lib/server/types";
 
-const uri = process.env.MONGODB_URI ?? "mongodb://localhost:27017";
 const dbName = process.env.MONGODB_DB ?? "gamepass";
 
-// Cache the client + seed flag across hot reloads / warm serverless invocations
-// so we don't open a new connection per request.
+// Cache the client promise + seed flag across hot reloads / warm serverless
+// invocations so we don't open a new connection per request. Crucially we must
+// NOT keep a *rejected* promise cached — otherwise a single failed connect (e.g.
+// a paused Atlas cluster) would keep failing until the process restarts, even
+// after the database recovers.
 const g = globalThis as unknown as { _mongoClient?: Promise<MongoClient>; _seeded?: boolean };
 
 function client(): Promise<MongoClient> {
-  if (!g._mongoClient) g._mongoClient = new MongoClient(uri).connect();
+  // No localhost fallback on purpose: a missing/unreachable database must fail
+  // loudly rather than silently connect somewhere unexpected.
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error(
+      "MONGODB_URI is not set. Point it at your MongoDB (Atlas SRV string, " +
+        "mongodb+srv://…) — set it in .env for local dev and in your host's " +
+        "environment variables in production.",
+    );
+  }
+  if (!g._mongoClient) {
+    g._mongoClient = new MongoClient(uri, { serverSelectionTimeoutMS: 8000 })
+      .connect()
+      .catch((err) => {
+        g._mongoClient = undefined; // allow the next request to retry instead of caching the failure
+        throw err;
+      });
+  }
   return g._mongoClient;
 }
 
