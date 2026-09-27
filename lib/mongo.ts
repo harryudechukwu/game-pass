@@ -57,6 +57,9 @@ async function ensureSeed(db: Db): Promise<void> {
       { $set: { name: process.env.ADMIN_NAME?.trim() || "Administrator", password: hashPassword(password), role: "admin" }, $setOnInsert: { _id: id("adm") } },
       { upsert: true },
     );
+    // The env admin is the sole owner login — drop any other admin/staff
+    // accounts (e.g. the old demo seeds) so their credentials stop working.
+    await admins.deleteMany({ role: { $in: ["admin", "staff"] }, email: { $ne: email } });
   }
 
   if ((await admins.estimatedDocumentCount()) === 0) await seed(db);

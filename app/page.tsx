@@ -12,6 +12,8 @@ const DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${enc
 export default function LandingPage() {
   return (
     <main className="cc-landing">
+      <link rel="preload" as="image" href="/img/cc-bg-mobile.jpg" media="(max-width: 767px)" />
+      <link rel="preload" as="image" href="/img/cc-bg-desktop.png" media="(min-width: 768px)" />
       <div className="cc-landing-inner">
         <div className="cc-landing-logo"><IceCream size={24} weight="duotone" /> Creamy Castle</div>
         <h1 className="cc-landing-title">Where kids &amp; teens come to play</h1>

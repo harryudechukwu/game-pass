@@ -8,6 +8,7 @@ import { LoginShell, LoginField } from "@/components/LoginShell";
 export default function LoginPage() {
   const router = useRouter();
   const [phone, setPhone] = useState("");
+  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -16,7 +17,7 @@ export default function LoginPage() {
     setError("");
     setBusy(true);
     try {
-      await api("/api/auth/login", { method: "POST", body: { phone } });
+      await api("/api/auth/login", { method: "POST", body: { phone, remember } });
       router.push("/home");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Something went wrong.");
@@ -33,6 +34,8 @@ export default function LoginPage() {
       error={error}
       submitLabel="Login to account"
       submitDisabled={phone.replace(/\s+/g, "").length < 6}
+      remember={remember}
+      onRememberChange={setRemember}
     >
       <LoginField
         label="Your phone number"

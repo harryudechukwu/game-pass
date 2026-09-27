@@ -16,6 +16,8 @@ export function LoginShell({
   submitDisabled,
   back,
   footer,
+  remember,
+  onRememberChange,
   children,
 }: {
   title: string;
@@ -27,6 +29,8 @@ export function LoginShell({
   submitDisabled?: boolean;
   back?: string;
   footer?: React.ReactNode;
+  remember?: boolean;
+  onRememberChange?: (v: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
@@ -43,6 +47,12 @@ export function LoginShell({
         </div>
         {error && <div className="gp-login-error">{error}</div>}
         <div className="gp-login-fields">{children}</div>
+        {onRememberChange && (
+          <label className="gp-login-remember">
+            <input type="checkbox" checked={!!remember} onChange={(e) => onRememberChange(e.target.checked)} />
+            <span>Remember me for 30 days</span>
+          </label>
+        )}
         <button type="submit" className="gp-cta gp-login-btn" disabled={busy || submitDisabled}>
           {busy ? <span className="gp-cta-dots"><i /><i /><i /></span> : submitLabel}
         </button>

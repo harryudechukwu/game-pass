@@ -34,12 +34,12 @@ export default function AdminGamesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="admin-head flex items-center justify-between">
+      <div className="admin-head flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Games</h1>
           <p className="text-sm text-white/50">{games.length} games · Kids &amp; Teenager categories</p>
         </div>
-        <button className="btn-primary" onClick={() => setEditing({ status: "active", category: "kids", icon: "gamepad", priceKobo: 100000, durationMinutes: 60 })}>
+        <button className="btn-primary w-full md:w-auto" onClick={() => setEditing({ status: "active", category: "kids", icon: "gamepad", priceKobo: 100000, durationMinutes: 60 })}>
           <Plus size={18} /> New game
         </button>
       </div>

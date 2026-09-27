@@ -37,13 +37,15 @@ function verify(token: string | undefined): string | null {
   return value;
 }
 
-function opts() {
+function opts(remember: boolean) {
   return {
     httpOnly: true,
     sameSite: "lax" as const,
     path: "/",
     secure: process.env.NODE_ENV === "production",
-    maxAge: MAX_AGE,
+    // "remember me" → a persistent 30-day cookie; otherwise a session cookie
+    // that clears when the browser is closed.
+    ...(remember ? { maxAge: MAX_AGE } : {}),
   };
 }
 
@@ -58,20 +60,20 @@ export async function getSession(): Promise<SessionCtx> {
   };
 }
 
-export async function setPlayerSession(id: string) {
-  (await cookies()).set(PLAYER, sign(id), opts());
+export async function setPlayerSession(id: string, remember = true) {
+  (await cookies()).set(PLAYER, sign(id), opts(remember));
 }
 export async function clearPlayerSession() {
   (await cookies()).delete(PLAYER);
 }
-export async function setAdminSession(id: string) {
-  (await cookies()).set(ADMIN, sign(id), opts());
+export async function setAdminSession(id: string, remember = true) {
+  (await cookies()).set(ADMIN, sign(id), opts(remember));
 }
 export async function clearAdminSession() {
   (await cookies()).delete(ADMIN);
 }
-export async function setAttendantSession(id: string) {
-  (await cookies()).set(ATTENDANT, sign(id), opts());
+export async function setAttendantSession(id: string, remember = true) {
+  (await cookies()).set(ATTENDANT, sign(id), opts(remember));
 }
 export async function clearAttendantSession() {
   (await cookies()).delete(ATTENDANT);

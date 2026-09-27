@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, IconContext } from "@phosphor-icons/react";
+import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, List, IconContext } from "@phosphor-icons/react";
+import { X } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { money } from "@/lib/format";
 import { Spinner, ErrorNote } from "@/components/ui";
@@ -46,6 +47,7 @@ export default function AttendantPage() {
   const [redeemBusy, setRedeemBusy] = useState(false);
   const [redeemError, setRedeemError] = useState("");
   const [redeemResult, setRedeemResult] = useState<RedeemResult | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
 
   const loadStatic = useCallback(async () => {
@@ -144,13 +146,30 @@ export default function AttendantPage() {
               <p className="text-xs text-white/40">Log the games and items a guest bought</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          {/* desktop actions */}
+          <div className="hidden items-center gap-3 md:flex">
             <button onClick={() => setRedeemMode(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-b-[3px] border-[#dfe3e9] bg-white px-3 py-1.5 text-sm font-semibold text-[#0d47a1]"><Gift size={17} /> Redeem reward</button>
-            {me && <span className="pill hidden sm:inline-flex">{me.name}</span>}
+            {me && <span className="pill">{me.name}</span>}
             <button onClick={logout} className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white"><LogOut size={18} /> Sign out</button>
           </div>
+          {/* mobile hamburger */}
+          <button onClick={() => setMenuOpen(true)} aria-label="Menu" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1] md:hidden"><List size={22} weight="duotone" /></button>
         </div>
       </div>
+
+      {/* mobile expanded nav — like the customer overlay */}
+      {menuOpen && (
+        <div className="pop-in fixed inset-0 z-50 flex flex-col bg-[#e9f2fb]/95 p-6 backdrop-blur-md md:hidden">
+          <div className="flex items-center justify-between">
+            {me ? <span className="pill">{me.name}</span> : <span />}
+            <button onClick={() => setMenuOpen(false)} aria-label="Close" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1]"><X size={22} /></button>
+          </div>
+          <div className="mt-8 space-y-3">
+            <button onClick={() => { setMenuOpen(false); setRedeemMode(true); }} className="flex w-full items-center gap-3 rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white px-4 py-4 text-left text-lg font-semibold text-[#0d47a1]"><Gift size={22} weight="duotone" /> Redeem reward</button>
+            <button onClick={() => { setMenuOpen(false); logout(); }} className="flex w-full items-center gap-3 rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white px-4 py-4 text-left text-lg font-semibold text-[#0d47a1]"><LogOut size={22} weight="duotone" /> Sign out</button>
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto max-w-6xl px-6 py-8">
         {result ? (
@@ -255,9 +274,9 @@ export default function AttendantPage() {
 
               <div className="card p-5">
                 <h2 className="mb-3 font-bold">2 · Add games &amp; items</h2>
-                <div className="mb-3 flex flex-wrap gap-2">
+                <div className="mb-3 flex gap-2">
                   {MAIN_TABS.map((t) => (
-                    <button key={t.key} onClick={() => setMainTab(t.key)} className={`inline-flex items-center gap-2 rounded-lg border border-b-[3px] px-4 py-2 text-base ${mainTab === t.key ? "border-[#2170ed] bg-[#5a95f2] font-semibold text-[#ffffff]" : "border-transparent bg-white/5 text-white/60 hover:bg-white/10"}`}>
+                    <button key={t.key} onClick={() => setMainTab(t.key)} className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-b-[3px] px-4 py-2 text-base ${mainTab === t.key ? "border-[#2170ed] bg-[#5a95f2] font-semibold text-[#ffffff]" : "border-transparent bg-white/5 text-white/60 hover:bg-white/10"}`}>
                       <t.icon size={20} /> {t.label}
                     </button>
                   ))}
@@ -273,9 +292,9 @@ export default function AttendantPage() {
                     const kind = mainTab === "items" ? "item" : "game";
                     const inCart = cart.find((l) => l.kind === kind && l.ref.id === c.id);
                     return (
-                      <button key={c.id} onClick={() => addToCart(kind, c)} className={`relative flex min-h-[104px] flex-col justify-end rounded-2xl border border-b-[3px] border-[#dfe3e9] p-4 text-left transition ${inCart ? "bg-[#5a95f2]/10" : "hover:bg-[#f5f8fd]"}`}>
+                      <button key={c.id} onClick={() => addToCart(kind, c)} className={`relative flex min-h-[84px] flex-col justify-start rounded-2xl border border-b-[3px] border-[#dfe3e9] p-4 text-left transition ${inCart ? "bg-[#5a95f2]/10" : "hover:bg-[#f5f8fd]"}`}>
                         {inCart && <span className="absolute right-3 top-3 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#5a95f2] px-1.5 text-sm font-bold text-white">{inCart.qty}</span>}
-                        <p className="truncate pr-6 text-base font-bold sm:text-lg">{c.name}</p>
+                        <p className="line-clamp-2 pr-6 text-base font-bold leading-snug sm:text-lg">{c.name}</p>
                         <p className="mt-1 text-sm font-semibold text-white/45 sm:text-base">{c.priceLabel}{mainTab !== "items" ? "/hr" : ""}</p>
                       </button>
                     );

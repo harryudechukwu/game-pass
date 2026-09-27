@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { RefreshCw, Menu } from "lucide-react";
-import { X, SignOut as LogOut } from "@phosphor-icons/react";
+import { RefreshCw, Menu, X } from "lucide-react";
+import { SignOut as LogOut } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Icon } from "@/components/Icon";
 
@@ -129,7 +129,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
         <header className="gp-topbar" />
 
         <button className="gp-hamburger" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
-          {menuOpen ? <X size={22} weight="duotone" /> : <Menu size={22} />}
+          {menuOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
 
         <nav className={clsx("gp-menu", menuOpen && "gp-menu--open")} aria-hidden={!menuOpen} onClick={() => setMenuOpen(false)}>

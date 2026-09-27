@@ -9,6 +9,7 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -17,7 +18,7 @@ export default function AdminLoginPage() {
     setBusy(true);
     setError("");
     try {
-      const res = await api<{ admin: { role: string } }>("/api/admin/login", { method: "POST", body: { email, password } });
+      const res = await api<{ admin: { role: string } }>("/api/admin/login", { method: "POST", body: { email, password, remember } });
       router.push(res.admin.role === "manager" ? "/admin/overview" : "/admin");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Login failed.");
@@ -34,6 +35,8 @@ export default function AdminLoginPage() {
       error={error}
       submitLabel="Sign in"
       back="/"
+      remember={remember}
+      onRememberChange={setRemember}
     >
       <LoginField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
       <LoginField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />

@@ -35,12 +35,12 @@ export default function AdminItemsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="admin-head flex items-center justify-between">
+      <div className="admin-head flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Items</h1>
           <p className="text-sm text-white/50">Things sold in the playground — attendants add these to a guest&apos;s spend.</p>
         </div>
-        <button className="btn-primary" onClick={() => setEditing({ icon: "coins", priceKobo: 50000, active: true })}><Plus size={18} /> New item</button>
+        <button className="btn-primary w-full md:w-auto" onClick={() => setEditing({ icon: "coins", priceKobo: 50000, active: true })}><Plus size={18} /> New item</button>
       </div>
 
       {error && <ErrorNote message={error} />}

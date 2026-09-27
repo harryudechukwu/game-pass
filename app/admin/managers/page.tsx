@@ -26,12 +26,12 @@ export default function AdminManagersPage() {
 
   return (
     <div className="space-y-5">
-      <div className="admin-head flex items-center justify-between">
+      <div className="admin-head flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Managers</h1>
           <p className="text-sm text-white/50">Limited operators — they manage the catalogue &amp; correct sales, but can&apos;t see full admin data. Only you (admin) can add them.</p>
         </div>
-        <button className="btn-primary" onClick={() => setCreating(true)}><Plus size={18} /> New manager</button>
+        <button className="btn-primary w-full md:w-auto" onClick={() => setCreating(true)}><Plus size={18} /> New manager</button>
       </div>
 
       {error && <ErrorNote message={error} />}

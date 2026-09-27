@@ -26,11 +26,12 @@ async function dispatch(req: Request, method: string): Promise<NextResponse> {
   try {
     const data = (await handle(path, method, body, session, url.searchParams)) as Record<string, unknown>;
     const seg = path.split("/").filter(Boolean).slice(1);
-    if (seg[0] === "auth" && seg[1] === "login" && method === "POST") await setPlayerSession((data.player as { id: string }).id);
+    const remember = body.remember === true;
+    if (seg[0] === "auth" && seg[1] === "login" && method === "POST") await setPlayerSession((data.player as { id: string }).id, remember);
     else if (seg[0] === "auth" && seg[1] === "logout" && method === "POST") await clearPlayerSession();
-    else if (seg[0] === "admin" && seg[1] === "login" && method === "POST") await setAdminSession((data.admin as { id: string }).id);
+    else if (seg[0] === "admin" && seg[1] === "login" && method === "POST") await setAdminSession((data.admin as { id: string }).id, remember);
     else if (seg[0] === "admin" && seg[1] === "logout" && method === "POST") await clearAdminSession();
-    else if (seg[0] === "attendant" && seg[1] === "login" && method === "POST") await setAttendantSession((data.attendant as { id: string }).id);
+    else if (seg[0] === "attendant" && seg[1] === "login" && method === "POST") await setAttendantSession((data.attendant as { id: string }).id, remember);
     else if (seg[0] === "attendant" && seg[1] === "logout" && method === "POST") await clearAttendantSession();
     return NextResponse.json({ ok: true, data });
   } catch (e) {

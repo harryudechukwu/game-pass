@@ -27,12 +27,12 @@ export default function AdminAttendantsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="admin-head flex items-center justify-between">
+      <div className="admin-head flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Attendants</h1>
           <p className="text-sm text-white/50">Staff who log games &amp; items. Each has their own sign-in.</p>
         </div>
-        <button className="btn-primary" onClick={() => setCreating(true)}><Plus size={18} /> New attendant</button>
+        <button className="btn-primary w-full md:w-auto" onClick={() => setCreating(true)}><Plus size={18} /> New attendant</button>
       </div>
 
       {error && <ErrorNote message={error} />}
