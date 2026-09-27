@@ -143,7 +143,7 @@ export default function AttendantPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1]"><Scan size={26} weight="duotone" /></div>
             <div>
               <p className="font-black tracking-tight">Attendant Console</p>
-              <p className="text-xs text-white/40">Log the games and items a guest bought</p>
+              <p className="text-xs text-white/40">Log games and items bought</p>
             </div>
           </div>
           {/* desktop actions */}
