@@ -7,8 +7,8 @@ import { LoginShell, LoginField } from "@/components/LoginShell";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("admin@arcade.test");
-  const [password, setPassword] = useState("admin1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,7 +34,6 @@ export default function AdminLoginPage() {
       error={error}
       submitLabel="Sign in"
       back="/"
-      footer={<p className="gp-login-foot">Demo: admin@arcade.test / admin1234</p>}
     >
       <LoginField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
       <LoginField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />

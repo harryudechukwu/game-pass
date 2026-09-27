@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { money } from "@/lib/format";
 import { cols } from "@/lib/server/db";
+import { verifyPassword } from "@/lib/server/password";
 import type { SessionCtx } from "@/lib/server/session";
 import type { Attendant, Game, Item, Player, Purchase, Reward } from "@/lib/server/types";
 
@@ -223,7 +224,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   // ── attendant auth ──
   if (r[0] === "attendant" && r[1] === "login" && method === "POST") {
     const att = await c.attendants.findOne({ username: String(b.username ?? "").trim().toLowerCase() });
-    if (!att || att.password !== String(b.password ?? "")) throw new HttpError(401, "invalid_credentials", "Incorrect username or password.");
+    if (!att || !verifyPassword(att.password, String(b.password ?? ""))) throw new HttpError(401, "invalid_credentials", "Incorrect username or password.");
     return { attendant: { id: att._id, name: att.name, username: att.username } };
   }
   if (r[0] === "attendant" && r[1] === "logout" && method === "POST") return { loggedOut: true };
@@ -377,7 +378,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
 async function adminApi(c: Cols, r: string[], method: string, b: Body, query: URLSearchParams, ctx: SessionCtx): Promise<unknown> {
   if (r[1] === "login" && method === "POST") {
     const admin = await c.admins.findOne({ email: String(b.email ?? "").toLowerCase() });
-    if (!admin || admin.password !== String(b.password ?? "")) throw new HttpError(401, "invalid_credentials", "Incorrect email or password.");
+    if (!admin || !verifyPassword(admin.password, String(b.password ?? ""))) throw new HttpError(401, "invalid_credentials", "Incorrect email or password.");
     return { admin: { id: admin._id, name: admin.name, email: admin.email, role: admin.role } };
   }
   if (r[1] === "logout" && method === "POST") return { loggedOut: true };
