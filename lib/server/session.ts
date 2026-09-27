@@ -4,14 +4,24 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // Tamper-proof session cookies: the value is the player/admin id, signed with an
 // HMAC. No DB session table needed. (node:crypto — no extra dependency.)
 
-const secret = process.env.AUTH_SECRET ?? "dev-insecure-secret-change-me-please-0123456789";
+// Resolve the signing secret per call. In production a real AUTH_SECRET is
+// mandatory: without it we'd fall back to the public default below and anyone
+// could forge a session cookie for any id — so we fail closed instead.
+function activeSecret(): string {
+  const s = process.env.AUTH_SECRET;
+  if (s) return s;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("AUTH_SECRET is not set. Set a long random value in your host's environment variables — sessions cannot be signed securely without it.");
+  }
+  return "dev-insecure-secret-change-me-please-0123456789";
+}
 const PLAYER = "gp_player";
 const ADMIN = "gp_admin";
 const ATTENDANT = "gp_attendant";
 const MAX_AGE = 60 * 60 * 24 * 30;
 
 function sign(value: string): string {
-  const mac = createHmac("sha256", secret).update(value).digest("base64url");
+  const mac = createHmac("sha256", activeSecret()).update(value).digest("base64url");
   return `${value}.${mac}`;
 }
 function verify(token: string | undefined): string | null {
@@ -20,7 +30,7 @@ function verify(token: string | undefined): string | null {
   if (i <= 0) return null;
   const value = token.slice(0, i);
   const mac = token.slice(i + 1);
-  const expected = createHmac("sha256", secret).update(value).digest("base64url");
+  const expected = createHmac("sha256", activeSecret()).update(value).digest("base64url");
   const a = Buffer.from(mac);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;

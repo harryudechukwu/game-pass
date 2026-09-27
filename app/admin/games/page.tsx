@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Pencil, Trash2, X, Star } from "lucide-react";
+import { Plus, Pencil, Trash as Trash2, X, Star } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote, StatusPill } from "@/components/ui";
-import { CatalogTile, IconPicker } from "@/components/CatalogIcon";
 
 type Game = {
   id: string; name: string; description: string; category: "kids" | "teen"; icon: string;
@@ -35,7 +34,7 @@ export default function AdminGamesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="admin-head flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Games</h1>
           <p className="text-sm text-white/50">{games.length} games · Kids &amp; Teenager categories</p>
@@ -51,17 +50,16 @@ export default function AdminGamesPage() {
         {games.map((g) => (
           <div key={g.id} className="card p-4">
             <div className="flex items-start gap-3">
-              <CatalogTile name={g.icon} accent={g.category === "kids" ? "kids" : "teen"} className="h-14 w-14" size={26} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="truncate font-bold">{g.name}</h3>
-                  {g.featured && <Star size={13} className="shrink-0 text-[#ffc800]" />}
+                  {g.featured && <Star size={14} className="shrink-0 text-[#0d47a1]" />}
                 </div>
                 <p className="text-xs text-white/45">{g.location}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <StatusPill status={g.status} />
-                  <span className="pill bg-white/5 text-white/60 capitalize">{g.category}</span>
-                  <span className="pill bg-[#2f6bff]/15 text-[#2f6bff]">{g.priceLabel}/hr</span>
+                  <span className="pill capitalize">{g.category}</span>
+                  <span className="pill">{g.priceLabel}/hr</span>
                 </div>
               </div>
             </div>
@@ -142,7 +140,6 @@ function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClo
           <Field label="Duration per hour (minutes)"><input type="number" className="input" value={form.durationMinutes} onChange={(e) => set("durationMinutes", e.target.value as never)} /></Field>
           <Field label="Min age (blank = none)"><input type="number" className="input" value={form.minAge} onChange={(e) => set("minAge", e.target.value as never)} /></Field>
           <Field label="Min height cm (blank = none)"><input type="number" className="input" value={form.minHeightCm} onChange={(e) => set("minHeightCm", e.target.value as never)} /></Field>
-          <Field className="sm:col-span-2" label="Icon"><IconPicker value={form.icon} onChange={(v) => set("icon", v)} /></Field>
           <Field className="sm:col-span-2" label="Instructions"><textarea className="input" value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field>
           <Field label="Rules"><textarea className="input" value={form.rules} onChange={(e) => set("rules", e.target.value)} /></Field>
           <Field label="Safety"><textarea className="input" value={form.safety} onChange={(e) => set("safety", e.target.value)} /></Field>

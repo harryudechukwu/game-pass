@@ -48,6 +48,11 @@ export type Purchase = {
   headsUpEndsAt: number | null;
   mainEndsAt: number | null;
   location: string | null;
+  // sale correction audit (set when a manager/admin fixes an attendant's mistake)
+  editedAt?: number | null;
+  editedByName?: string | null;
+  originalQuantity?: number | null;
+  originalAmountKobo?: number | null;
 };
 
 export type Reward = {
@@ -55,11 +60,12 @@ export type Reward = {
   name: string;
   description: string | null;
   spendRequiredKobo: number;
+  terms: string[] | null;
   active: boolean;
   createdAt: number;
 };
 
-export type Redemption = { _id: string; playerId: string; rewardId: string; code: string; redeemedAt: number };
+export type Redemption = { _id: string; playerId: string; rewardId: string; code: string; redeemedAt: number; fulfilledAt?: number | null; fulfilledByName?: string | null };
 
 export type Admin = { _id: string; email: string; name: string; password: string; role: string };
 

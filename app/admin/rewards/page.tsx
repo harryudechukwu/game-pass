@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, X, Power, Gift, Trash2 } from "lucide-react";
+import { Plus, Pencil, X, Power, Trash as Trash2 } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote } from "@/components/ui";
 
@@ -11,6 +11,7 @@ type Reward = {
   description: string | null;
   spendRequiredKobo: number;
   spendRequiredLabel: string;
+  terms: string[] | null;
   active: boolean;
 };
 
@@ -34,7 +35,7 @@ export default function AdminRewardsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="admin-head flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Rewards</h1>
           <p className="text-sm text-white/50">Milestones unlocked once a player&apos;s total spend reaches the threshold.</p>
@@ -48,11 +49,12 @@ export default function AdminRewardsPage() {
         {rewards.map((r) => (
           <div key={r.id} className={`card p-4 ${!r.active ? "opacity-60" : ""}`}>
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ffc800]/15 text-[#ffc800]"><Gift size={18} /></div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#bbdefb] bg-[#e3f3fd]"><img src="/img/reward.svg" alt="" width={24} height={24} /></div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-bold">{r.name}</h3>
-                  <span className="pill shrink-0 bg-white/5 text-white/60">spend {r.spendRequiredLabel}</span>
+                  <span className="pill shrink-0">spend {r.spendRequiredLabel}</span>
                 </div>
                 <p className="text-xs text-white/45">{r.description}</p>
                 <div className="mt-3 flex gap-1">
@@ -77,6 +79,7 @@ function RewardForm({ initial, onClose, onSaved }: { initial: Partial<Reward>; o
     name: initial.name ?? "",
     description: initial.description ?? "",
     spendNaira: initial.spendRequiredKobo != null ? Math.round(initial.spendRequiredKobo / 100) : 5000,
+    terms: (initial.terms ?? []).join("\n"),
     active: initial.active ?? true,
   });
   const [busy, setBusy] = useState(false);
@@ -84,7 +87,7 @@ function RewardForm({ initial, onClose, onSaved }: { initial: Partial<Reward>; o
 
   async function save() {
     setBusy(true); setError("");
-    const payload = { name: form.name, description: form.description || null, spendRequiredKobo: Number(form.spendNaira) * 100, active: form.active };
+    const payload = { name: form.name, description: form.description || null, spendRequiredKobo: Number(form.spendNaira) * 100, terms: form.terms.split("\n").map((s) => s.trim()).filter(Boolean), active: form.active };
     try {
       if (isEdit) await api(`/api/admin/rewards/${initial.id}`, { method: "PATCH", body: payload });
       else await api("/api/admin/rewards", { method: "POST", body: payload });
@@ -104,7 +107,8 @@ function RewardForm({ initial, onClose, onSaved }: { initial: Partial<Reward>; o
           <div><label className="label">Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Free Game Token" /></div>
           <div><label className="label">Description</label><input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="label">Spend required to unlock (₦)</label><input type="number" min={1} className="input" value={form.spendNaira} onChange={(e) => setForm({ ...form, spendNaira: e.target.value as never })} /></div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#2f6bff]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
+          <div><label className="label">Terms &amp; conditions <span className="text-white/40">(one per line)</span></label><textarea className="input" rows={3} value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} placeholder={"Redeemable at Creamy Castle, Ogidi\nValid for 30 days once unlocked"} /></div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#0d47a1]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>

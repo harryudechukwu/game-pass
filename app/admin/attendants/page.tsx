@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2, X, ScanLine } from "lucide-react";
+import { Scan, Plus, Trash as Trash2, X } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { timeAgo } from "@/lib/format";
-import { Loading, ErrorNote } from "@/components/ui";
+import { Loading, ErrorNote, Reveal } from "@/components/ui";
 
-type Attendant = { id: string; name: string; username: string; createdAt: string };
+type Attendant = { id: string; name: string; username: string; password: string; createdAt: string };
 
 export default function AdminAttendantsPage() {
   const [rows, setRows] = useState<Attendant[]>([]);
@@ -27,7 +27,7 @@ export default function AdminAttendantsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="admin-head flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Attendants</h1>
           <p className="text-sm text-white/50">Staff who log games &amp; items. Each has their own sign-in.</p>
@@ -41,10 +41,11 @@ export default function AdminAttendantsPage() {
         {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No attendants yet.</p>}
         {rows.map((a) => (
           <div key={a.id} className="flex items-center gap-4 px-4 py-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#2f6bff] to-[#1cb0f6] text-white"><ScanLine size={18} /></div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1]"><Scan size={20} weight="duotone" /></div>
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{a.name}</p>
               <p className="text-xs text-white/45">@{a.username} · added {timeAgo(a.createdAt)}</p>
+              <div className="mt-1"><Reveal label="Password" value={a.password} /></div>
             </div>
             <button className="btn-danger !px-2.5 !py-1.5" onClick={() => remove(a)} aria-label="Delete"><Trash2 size={14} /></button>
           </div>
