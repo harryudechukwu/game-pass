@@ -1,6 +1,7 @@
 import { MongoClient, type Db } from "mongodb";
 import { nanoid } from "nanoid";
 import type { Admin, Attendant, Settings } from "@/lib/server/types";
+import { hashPassword } from "@/lib/server/password";
 
 const dbName = process.env.MONGODB_DB ?? "gamepass";
 
@@ -43,7 +44,22 @@ const id = (p: string) => `${p}_${nanoid(12)}`;
 
 async function ensureSeed(db: Db): Promise<void> {
   if (g._seeded) return;
-  if ((await db.collection("admins").estimatedDocumentCount()) === 0) await seed(db);
+  const admins = db.collection<Admin>("admins");
+
+  // The owner admin login is configured via env (ADMIN_EMAIL / ADMIN_PASSWORD)
+  // and always stored hashed. Setting or changing those is how you rotate the
+  // admin password — it never lives in source or in the DB in the clear.
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+  if (email && password) {
+    await admins.updateOne(
+      { email },
+      { $set: { name: process.env.ADMIN_NAME?.trim() || "Administrator", password: hashPassword(password), role: "admin" }, $setOnInsert: { _id: id("adm") } },
+      { upsert: true },
+    );
+  }
+
+  if ((await admins.estimatedDocumentCount()) === 0) await seed(db);
   // Ensure at least one attendant login exists (also back-fills older databases).
   if ((await db.collection("attendants").estimatedDocumentCount()) === 0) {
     await db.collection<Attendant>("attendants").insertOne({
@@ -59,9 +75,11 @@ async function ensureSeed(db: Db): Promise<void> {
 }
 
 async function seed(db: Db): Promise<void> {
+  // Dev fallback only (used when no ADMIN_* env is set). Passwords are hashed;
+  // these demo logins should be overridden via env or removed in production.
   await db.collection<Admin>("admins").insertMany([
-    { _id: id("adm"), email: "admin@arcade.test", name: "Arcade Admin", password: "admin1234", role: "admin" },
-    { _id: id("adm"), email: "staff@arcade.test", name: "Front Desk", password: "staff1234", role: "staff" },
+    { _id: id("adm"), email: "admin@arcade.test", name: "Arcade Admin", password: hashPassword("admin1234"), role: "admin" },
+    { _id: id("adm"), email: "staff@arcade.test", name: "Front Desk", password: hashPassword("staff1234"), role: "staff" },
   ]);
 
   await db.collection<Settings>("settings").updateOne({ _id: "app" }, { $set: { headsUpSeconds: 60 } }, { upsert: true });

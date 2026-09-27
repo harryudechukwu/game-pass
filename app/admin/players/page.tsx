@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, ChevronRight, Gift } from "lucide-react";
+import { MagnifyingGlass as Search, CaretRight as ChevronRight, Gift } from "@phosphor-icons/react";
 import { api } from "@/lib/client";
 import { Loading } from "@/components/ui";
 
@@ -30,7 +30,7 @@ export default function AdminPlayersPage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div className="admin-head">
         <h1 className="text-2xl font-black tracking-tight">Players</h1>
         <p className="text-sm text-white/50">Ranked by amount spent.</p>
       </div>
@@ -47,7 +47,7 @@ export default function AdminPlayersPage() {
           {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No players found.</p>}
           {rows.map((c) => (
             <Link key={c.id} href={`/admin/players/${c.id}`} className="flex items-center gap-4 px-4 py-3 hover:bg-white/5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#2f6bff] to-[#1cb0f6] text-sm font-bold text-white">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e3f3fd] text-sm font-bold text-[#0d47a1]">
                 {(c.name ?? c.phone).slice(0, 1).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
@@ -56,7 +56,7 @@ export default function AdminPlayersPage() {
               </div>
               {c.redemptions > 0 && <span className="pill bg-[#ffc800]/15 text-[#ffc800]"><Gift size={11} /> {c.redemptions}</span>}
               <div className="text-right">
-                <p className="font-bold text-[#2f6bff]">{c.spentLabel}</p>
+                <p className="font-bold text-[#0d47a1]">{c.spentLabel}</p>
                 <p className="text-[11px] text-white/40">spent</p>
               </div>
               <ChevronRight size={16} className="text-white/30" />

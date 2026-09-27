@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { LayoutDashboard, Gamepad2, ShoppingBag, Trophy, Users, Activity, LogOut, ShieldCheck, ScanLine } from "lucide-react";
+import { SquaresFour, GameController, ShoppingBag, Trophy, Users, ClockCounterClockwise, SignOut, ShieldCheck, Scan, UserGear, Receipt, ChartBar, ChartLineUp, IconContext, type Icon } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading } from "@/components/ui";
 
@@ -13,14 +13,20 @@ const AdminCtx = createContext<Admin | null>(null);
 export const useAdmin = () => useContext(AdminCtx);
 
 const nav = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/games", label: "Games", icon: Gamepad2 },
-  { href: "/admin/items", label: "Items", icon: ShoppingBag },
-  { href: "/admin/rewards", label: "Rewards", icon: Trophy },
-  { href: "/admin/attendants", label: "Attendants", icon: ScanLine },
-  { href: "/admin/players", label: "Players", icon: Users },
-  { href: "/admin/logs", label: "Logs", icon: Activity },
+  { href: "/admin/overview", label: "Overview", icon: ChartBar, roles: ["manager"] },
+  { href: "/admin", label: "Dashboard", icon: SquaresFour, roles: ["admin", "staff"] },
+  { href: "/admin/analytics", label: "Analytics", icon: ChartLineUp, roles: ["admin", "staff"] },
+  { href: "/admin/games", label: "Games", icon: GameController, roles: ["admin", "staff", "manager"] },
+  { href: "/admin/items", label: "Items", icon: ShoppingBag, roles: ["admin", "staff", "manager"] },
+  { href: "/admin/sales", label: "Sales", icon: Receipt, roles: ["admin", "staff", "manager"] },
+  { href: "/admin/rewards", label: "Rewards", icon: Trophy, roles: ["admin", "staff"] },
+  { href: "/admin/attendants", label: "Attendants", icon: Scan, roles: ["admin", "staff"] },
+  { href: "/admin/managers", label: "Managers", icon: UserGear, roles: ["admin"] },
+  { href: "/admin/players", label: "Players", icon: Users, roles: ["admin", "staff"] },
+  { href: "/admin/logs", label: "Logs", icon: ClockCounterClockwise, roles: ["admin", "staff"] },
 ];
+// managers get a limited console: only the catalogue pages
+const managerAllowed = (path: string) => path.startsWith("/admin/overview") || path.startsWith("/admin/games") || path.startsWith("/admin/items") || path.startsWith("/admin/sales");
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,27 +43,36 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, [router]);
 
-  async function logout() {
-    await api("/api/admin/logout", { method: "POST" }).catch(() => {});
+  // managers can't reach admin-only pages — bounce them to the catalogue
+  useEffect(() => {
+    if (admin?.role === "manager" && !managerAllowed(pathname)) router.replace("/admin/overview");
+  }, [admin, pathname, router]);
+
+  function logout() {
+    // fire-and-forget: navigate immediately so sign-out feels instant
+    void api("/api/admin/logout", { method: "POST" }).catch(() => {});
     router.replace("/admin/login");
   }
 
   if (loading) return <Loading label="Loading console…" />;
   if (!admin) return null;
 
+  const visibleNav = nav.filter((n) => n.roles.includes(admin.role));
+
   return (
-    <AdminCtx.Provider value={admin}>
+    <IconContext.Provider value={{ weight: "duotone" }}>
+      <AdminCtx.Provider value={admin}>
       <div className="flex min-h-screen">
         {/* Sidebar (desktop) */}
-        <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-black/20 p-4 md:flex">
+        <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto border-r border-[#e3f3fd] bg-white p-4 md:flex">
           <div className="mb-8 flex items-center gap-2 px-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#ffc800] to-[#f97316] text-black">
-              <ShieldCheck size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e3f3fd] text-[#0d47a1]">
+              <ShieldCheck size={20} weight="duotone" />
             </div>
             <span className="font-black">Operator</span>
           </div>
           <nav className="flex-1 space-y-1">
-            {nav.map((n) => (
+            {visibleNav.map((n) => (
               <NavLink key={n.href} {...n} active={isActive(pathname, n.href)} />
             ))}
           </nav>
@@ -69,21 +84,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <button onClick={logout} className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white">
-              <LogOut size={16} /> Sign out
+              <SignOut size={18} weight="duotone" /> Sign out
             </button>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Mobile top nav */}
-          <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3 md:hidden">
+          <div className="no-print flex items-center justify-between gap-3 border-b border-white/10 bg-black/20 px-4 py-3 md:hidden">
             <span className="font-black">Operator</span>
             <div className="flex items-center gap-2">
               <button onClick={logout} className="text-sm text-white/50">Sign out</button>
             </div>
           </div>
-          <div className="flex gap-1 overflow-x-auto border-b border-white/10 px-2 py-2 md:hidden">
-            {nav.map((n) => (
+          <div className="no-print flex gap-1 overflow-x-auto border-b border-white/10 px-2 py-2 md:hidden">
+            {visibleNav.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
@@ -100,7 +115,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <main className="flex-1 p-5 md:p-8">{children}</main>
         </div>
       </div>
-    </AdminCtx.Provider>
+      </AdminCtx.Provider>
+    </IconContext.Provider>
   );
 }
 
@@ -111,12 +127,12 @@ function isActive(pathname: string, href: string) {
 function NavLink({
   href,
   label,
-  icon: Icon,
+  icon: NavIcon,
   active,
 }: {
   href: string;
   label: string;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: Icon;
   active: boolean;
 }) {
   return (
@@ -124,10 +140,10 @@ function NavLink({
       href={href}
       className={clsx(
         "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-        active ? "bg-gradient-to-r from-[#2f6bff]/20 to-transparent text-white" : "text-white/55 hover:bg-white/5 hover:text-white",
+        active ? "bg-[#e3f3fd] text-[#0d47a1]" : "text-white/55 hover:bg-white/5 hover:text-white",
       )}
     >
-      <Icon size={18} /> {label}
+      <NavIcon size={20} weight="duotone" /> {label}
     </Link>
   );
 }

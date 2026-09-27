@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, X, Power } from "lucide-react";
+import { Plus, Pencil, Trash as Trash2, X, Power } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote } from "@/components/ui";
-import { CatalogTile, IconPicker } from "@/components/CatalogIcon";
 
 type Item = {
   id: string;
@@ -36,7 +35,7 @@ export default function AdminItemsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="admin-head flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Items</h1>
           <p className="text-sm text-white/50">Things sold in the playground — attendants add these to a guest&apos;s spend.</p>
@@ -50,11 +49,10 @@ export default function AdminItemsPage() {
         {items.map((i) => (
           <div key={i.id} className={`card p-4 ${!i.active ? "opacity-60" : ""}`}>
             <div className="flex items-start gap-3">
-              <CatalogTile name={i.icon} accent="item" className="h-12 w-12" size={24} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="truncate font-bold">{i.name}</h3>
-                  <span className="pill shrink-0 bg-[#34d399]/15 text-[#34d399]">{i.priceLabel}</span>
+                  <span className="pill shrink-0">{i.priceLabel}</span>
                 </div>
                 <p className="text-xs text-white/45">{i.description}</p>
                 <div className="mt-3 flex gap-1">
@@ -107,8 +105,7 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
           <div><label className="label">Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Bottled Water" /></div>
           <div><label className="label">Description</label><input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="label">Price (₦)</label><input type="number" className="input" value={form.priceNaira} onChange={(e) => setForm({ ...form, priceNaira: e.target.value as never })} /></div>
-          <div><label className="label">Icon</label><IconPicker value={form.icon} onChange={(v) => setForm({ ...form, icon: v })} /></div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#2f6bff]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#0d47a1]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>

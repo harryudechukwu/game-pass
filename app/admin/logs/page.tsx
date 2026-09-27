@@ -5,7 +5,6 @@ import { clsx } from "clsx";
 import { api } from "@/lib/client";
 import { timeAgo, clockTime } from "@/lib/format";
 import { Loading } from "@/components/ui";
-import { CatalogTile } from "@/components/CatalogIcon";
 
 type Log = {
   id: string;
@@ -35,14 +34,14 @@ export default function AdminLogsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div className="admin-head">
         <h1 className="text-2xl font-black tracking-tight">Purchase logs</h1>
         <p className="text-sm text-white/50">Everything attendants have logged, newest first.</p>
       </div>
 
       <div className="flex gap-2">
         {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-gradient-to-r from-[#2f6bff] to-[#1cb0f6] font-semibold text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
+          <button key={f} onClick={() => setFilter(f)} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-[#5a95f2] font-semibold text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
             {f === "all" ? "All" : `${f}s`}
           </button>
         ))}
@@ -56,7 +55,6 @@ export default function AdminLogsPage() {
         <div className="card divide-y divide-white/5">
           {logs.map((l) => (
             <div key={l.id} className="flex items-center gap-3 px-4 py-3">
-              <CatalogTile name={l.icon} accent={l.kind === "item" ? "item" : "muted"} className="h-10 w-10" size={20} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{l.name}{l.kind === "item" && l.quantity > 1 ? ` ×${l.quantity}` : l.kind === "game" ? ` · ${l.quantity}h` : ""}</p>
                 <p className="text-xs text-white/45">{l.player.firstName ?? "—"} · {l.player.phone}</p>

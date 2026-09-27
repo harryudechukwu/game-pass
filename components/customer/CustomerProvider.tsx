@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { LogOut, RefreshCw } from "lucide-react";
+import { RefreshCw, Menu } from "lucide-react";
+import { X, SignOut as LogOut } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Icon } from "@/components/Icon";
 
@@ -27,8 +28,8 @@ export function useCustomer(): Ctx {
 }
 
 const NAV = [
-  { href: "/home", label: "Home", icon: "home" as const },
-  { href: "/rewards", label: "Rewards", icon: "gift" as const },
+  { href: "/home", label: "Home", img: "/img/home.svg" },
+  { href: "/rewards", label: "Rewards", img: "/img/reward.svg" },
 ];
 
 export function CustomerProvider({ children }: { children: React.ReactNode }) {
@@ -37,6 +38,9 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<Omit<Ctx, "refresh"> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   const refresh = useCallback(async () => {
     try {
@@ -62,16 +66,26 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(t);
   }, [attempt, refresh]);
 
-  async function logout() {
-    await api("/api/auth/logout", { method: "POST" }).catch(() => {});
+  function logout() {
+    void api("/api/auth/logout", { method: "POST" }).catch(() => {});
     router.replace("/login");
   }
 
   if (loading && !state) {
     return (
-      <div className="gp-app gp-app--brand" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 10, color: "rgba(255,255,255,.85)", fontWeight: 600 }}>
-          <RefreshCw size={18} className="animate-spin" /> Loading…
+      <div className="gp-app" aria-busy="true">
+        <div className="gp-main">
+          <header className="gp-head">
+            <div className="skel" style={{ height: 28, width: 160, borderRadius: 9, background: "#cfe0fb" }} />
+            <div className="skel" style={{ height: 16, width: 230, maxWidth: "80%", borderRadius: 6, marginTop: 10, background: "#cfe0fb" }} />
+          </header>
+          <div className="gp-sheet">
+            <div className="skel" style={{ height: 150, borderRadius: 20, marginBottom: 22, border: "1px solid #bbdefb" }} />
+            <div className="skel" style={{ height: 18, width: 180, borderRadius: 6, marginBottom: 14, background: "#cfe0fb" }} />
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skel" style={{ height: 66, borderRadius: 15, marginBottom: 10, border: "1px solid #bbdefb" }} />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -95,44 +109,50 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
     <CustomerCtx.Provider value={{ ...state, refresh }}>
       <div className="gp-app gp-app--shell">
         <aside className="gp-sidebar">
-          <div className="gp-side-logo"><Icon name="joystick" size={26} /> Game Pass</div>
           <nav className="gp-side-nav">
             {NAV.map((n) => {
-              const active = pathname === n.href;
+              const active = pathname === n.href || pathname.startsWith(n.href + "/");
               return (
                 <Link key={n.href} href={n.href} className={clsx("gp-side-link", active && "gp-side-link--on")}>
-                  <Icon name={n.icon} size={22} /> {n.label}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={n.img} alt="" width={22} height={22} /> {n.label}
                   {n.href === "/rewards" && state.claimable > 0 && <span className="gp-badge">{state.claimable}</span>}
                 </Link>
               );
             })}
           </nav>
           <div className="gp-side-foot">
-            <button className="gp-side-signout" onClick={logout}><LogOut size={17} /> Sign out</button>
+            <button className="gp-side-signout" onClick={logout}><LogOut size={17} weight="duotone" /> Sign out</button>
           </div>
         </aside>
 
-        <div className="gp-main">
-          <button className="gp-signout" onClick={logout} aria-label="Sign out"><LogOut size={17} /></button>
-          {children}
-        </div>
+        <header className="gp-topbar" />
 
-        <nav className="gp-dock">
-          <div className="gp-dock-inner">
-            <div className="gp-navpill">
-              {NAV.map((n) => {
-                const active = pathname === n.href;
-                return (
-                  <Link key={n.href} href={n.href} className={clsx("gp-navb", active && "gp-navb--on")}>
-                    {n.href === "/rewards" && state.claimable > 0 && <span className="gp-badge">{state.claimable}</span>}
-                    <Icon name={n.icon} size={24} />
-                    {n.label}
-                  </Link>
-                );
-              })}
-            </div>
+        <button className="gp-hamburger" onClick={() => setMenuOpen((o) => !o)} aria-label="Menu" aria-expanded={menuOpen}>
+          {menuOpen ? <X size={22} weight="duotone" /> : <Menu size={22} />}
+        </button>
+
+        <nav className={clsx("gp-menu", menuOpen && "gp-menu--open")} aria-hidden={!menuOpen} onClick={() => setMenuOpen(false)}>
+          <div className="gp-menu-inner">
+            {NAV.map((n) => {
+              const active = pathname === n.href || pathname.startsWith(n.href + "/");
+              return (
+                <Link key={n.href} href={n.href} className={clsx("gp-menu-item", active && "gp-menu-item--on")} onClick={() => setMenuOpen(false)}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={n.img} alt="" width={24} height={24} /> {n.label}
+                  {n.href === "/rewards" && state.claimable > 0 && <span className="gp-badge" style={{ marginLeft: "auto" }}>{state.claimable}</span>}
+                </Link>
+              );
+            })}
+            <button className="gp-menu-item gp-menu-logout" onClick={() => { setMenuOpen(false); logout(); }}>
+              <LogOut size={22} weight="duotone" /> Log out
+            </button>
           </div>
         </nav>
+
+        <div className="gp-main">
+          {children}
+        </div>
       </div>
     </CustomerCtx.Provider>
   );

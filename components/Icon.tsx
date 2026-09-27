@@ -3,7 +3,7 @@
 import {
   House, Gift, GameController, Timer, Trophy, Coffee, Popcorn, Ticket,
   ShoppingBag, MagnifyingGlass, Star, Coin, TShirt, MusicNotes, PuzzlePiece,
-  type IconWeight,
+  Lock, type IconWeight,
 } from "@phosphor-icons/react";
 
 // One place that maps our semantic icon names → Phosphor icons, rendered in the
@@ -25,6 +25,7 @@ const MAP = {
   shirt: TShirt,
   music: MusicNotes,
   puzzle: PuzzlePiece,
+  lock: Lock,
 };
 
 export type IconName = keyof typeof MAP;

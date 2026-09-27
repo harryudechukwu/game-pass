@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiClientError } from "@/lib/client";
-import { useCustomer } from "@/components/customer/CustomerProvider";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { api } from "@/lib/client";
+import { money } from "@/lib/format";
 import { Icon } from "@/components/Icon";
 
 type Reward = {
   id: string;
   name: string;
   description: string | null;
+  spendRequiredKobo: number;
   spendRequiredLabel: string;
   unlocked: boolean;
   redeemed: boolean;
@@ -18,115 +22,57 @@ type Reward = {
 };
 
 export default function RewardsPage() {
-  const { refresh } = useCustomer();
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [spentLabel, setSpentLabel] = useState("₦0");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [copied, setCopied] = useState<string | null>(null);
+  const router = useRouter();
+  const [data, setData] = useState<{ spentKobo: number; rewards: Reward[] } | null>(null);
 
   const load = useCallback(async () => {
-    const r = await api<{ spentLabel: string; rewards: Reward[] }>("/api/rewards");
-    setRewards(r.rewards);
-    setSpentLabel(r.spentLabel);
+    setData(await api<{ spentKobo: number; rewards: Reward[] }>("/api/rewards"));
   }, []);
 
-  useEffect(() => { load().catch(() => {}); }, [load]);
+  useEffect(() => {
+    load().catch(() => {});
+    const t = setInterval(() => load().catch(() => {}), 5000);
+    return () => clearInterval(t);
+  }, [load]);
 
-  async function redeem(id: string) {
-    setBusy(id);
-    setError("");
-    try {
-      await api(`/api/rewards/${id}/redeem`, { method: "POST" });
-      await load();
-      await refresh();
-    } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "Could not redeem.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  function copy(code: string) {
-    navigator.clipboard?.writeText(code).then(() => {
-      setCopied(code);
-      setTimeout(() => setCopied(null), 1500);
-    });
-  }
-
-  const claim = rewards.filter((r) => r.claimable);
-  const redeemed = rewards.filter((r) => r.redeemed);
-  const locked = rewards.filter((r) => !r.unlocked && !r.redeemed);
+  const spent = data?.spentKobo ?? 0;
+  const rewards = data?.rewards ?? [];
 
   return (
     <>
       <header className="gp-head">
+        <button className="gp-back" onClick={() => router.back()} aria-label="Back"><ArrowLeft size={20} /></button>
         <div className="gp-hi">Rewards</div>
-        <div style={{ marginTop: 16 }}>
-          <div className="gp-eyebrow">You’ve spent</div>
-          <div className="gp-big">{spentLabel}</div>
-          <div className="gp-head-sub">Every purchase counts. Show the code to an attendant to claim.</div>
-        </div>
+        <div className="gp-welcome-sub">Spend and win lots of exciting rewards</div>
       </header>
 
       <div className="gp-sheet">
-        {error && <div className="gp-tag gp-tag--warn" style={{ marginBottom: 10 }}>{error}</div>}
-
-        {claim.length > 0 && (
-          <div className="gp-sec">
-            <div className="gp-sec-head"><span className="gp-sec-title">Ready to claim</span><span className="gp-chip">{claim.length}</span></div>
-            {claim.map((r) => (
-              <div key={r.id} style={{ paddingTop: 6 }}>
-                <div className="gp-row" style={{ borderTop: "none", paddingBottom: 8 }}>
-                  <div className="gp-hex gp-hex--g"><Icon name="trophy" /></div>
-                  <div className="gp-rmain">
-                    <div className="gp-name">{r.name}</div>
-                    <div className="gp-meta">{r.description ?? `Unlocked at ${r.spendRequiredLabel}`}</div>
-                  </div>
-                </div>
-                <button className="gp-btn gp-btn--gold" disabled={busy === r.id} onClick={() => redeem(r.id)}>
-                  {busy === r.id ? "Redeeming…" : "Redeem now"}
-                </button>
+        {rewards.map((r) => (
+          <Link key={r.id} href={`/rewards/${r.id}`} className="gp-item" style={{ textDecoration: "none" }}>
+            <div className="gp-tile"><img src="/img/reward.svg" alt="" /></div>
+            <div className="gp-item-main">
+              <div className="gp-item-name">{r.name}</div>
+              <div className="gp-item-sub">
+                {r.redeemed
+                  ? "Redeemed"
+                  : r.claimable
+                    ? "Ready to redeem"
+                    : `${money(r.spendRequiredKobo - spent, "NGN")} left to redeem`}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+            {r.redeemed ? (
+              <div className="gp-redeem"><span>View</span></div>
+            ) : r.claimable ? (
+              <div className="gp-redeem"><span>Redeem</span></div>
+            ) : (
+              <div className="gp-redeem"><span>Redeem</span><span className="gp-redeem-lock"><Icon name="lock" size={16} /></span></div>
+            )}
+          </Link>
+        ))}
 
-        {redeemed.length > 0 && (
-          <div className="gp-sec">
-            <div className="gp-sec-head"><span className="gp-sec-title">Redeemed</span></div>
-            {redeemed.map((r) => (
-              <div key={r.id} className="gp-row">
-                <div className="gp-hex gp-hex--m"><Icon name="gift" /></div>
-                <div className="gp-rmain">
-                  <div className="gp-name">{r.name}</div>
-                  <div className="gp-meta">Show code at the desk</div>
-                </div>
-                <div className="gp-rright">
-                  <button className="gp-code" onClick={() => r.code && copy(r.code)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>{r.code}</button>
-                  <span className="gp-tag gp-tag--done">{copied === r.code ? "Copied" : "Done"}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+        {data && rewards.length === 0 && (
+          <div className="gp-card"><span className="gp-empty-ic"><Icon name="trophy" size={26} /></span><span>No rewards yet. Keep spending and they’ll show up here.</span></div>
         )}
-
-        {locked.length > 0 && (
-          <div className="gp-sec">
-            <div className="gp-sec-head"><span className="gp-sec-title">Keep going</span></div>
-            {locked.map((r) => (
-              <div key={r.id} className="gp-row">
-                <div className="gp-hex"><Icon name="trophy" /></div>
-                <div className="gp-rmain">
-                  <div className="gp-name">{r.name}</div>
-                  <div className="gp-pbar"><i style={{ width: `${r.progressPct}%` }} /><span>{spentLabel} / {r.spendRequiredLabel}</span></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {rewards.length === 0 && <div className="gp-card"><span className="gp-empty-ic"><Icon name="trophy" size={26} /></span><span>No rewards available yet. Keep spending and they’ll appear here.</span></div>}
       </div>
     </>
   );

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { clsx } from "clsx";
+import { Eye, EyeSlash } from "@phosphor-icons/react";
 
 export function Spinner({ className }: { className?: string }) {
   return (
@@ -18,34 +20,45 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
+// Skeleton loader — a shimmering placeholder used while a screen's data loads
+// (replaces the old spinner). Generic header + card grid works for every
+// operator page. `label` is kept for the a11y announcement only.
 export function Loading({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-3 py-16 text-white/50">
-      <Spinner /> <span className="text-sm">{label}</span>
+    <div className="space-y-5" aria-busy="true" aria-label={label}>
+      <div className="space-y-2">
+        <div className="skel h-7 w-48" />
+        <div className="skel h-4 w-72 max-w-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="card p-4">
+            <div className="skel mb-3 h-10 w-10 rounded-xl" />
+            <div className="skel h-6 w-20" />
+            <div className="skel mt-2 h-3 w-14" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-const statusStyles: Record<string, string> = {
-  active: "bg-emerald-500/15 text-emerald-300",
-  available: "bg-emerald-500/15 text-emerald-300",
-  maintenance: "bg-amber-500/15 text-amber-300",
-  inactive: "bg-white/10 text-white/50",
-  created: "bg-indigo-500/15 text-indigo-300",
-  activated: "bg-cyan-500/15 text-cyan-300",
-  authorized: "bg-cyan-500/15 text-cyan-300",
-  in_progress: "bg-violet-500/15 text-violet-300",
-  completed: "bg-emerald-500/15 text-emerald-300",
-  cancelled: "bg-red-500/15 text-red-300",
-  expired: "bg-white/10 text-white/40",
-  pending: "bg-amber-500/15 text-amber-300",
-  success: "bg-emerald-500/15 text-emerald-300",
-  failed: "bg-red-500/15 text-red-300",
-};
-
 export function StatusPill({ status }: { status: string }) {
-  const cls = statusStyles[status] ?? "bg-white/10 text-white/60";
-  return <span className={clsx("pill", cls)}>{status.replace(/_/g, " ")}</span>;
+  return <span className="pill capitalize">{status.replace(/_/g, " ")}</span>;
+}
+
+// A sensitive value shown blurred until the admin clicks the eye to reveal it.
+export function Reveal({ label, value }: { label: string; value: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-white/50">
+      {label}:
+      <span className={clsx("font-mono text-white/70 transition", !show && "select-none blur-[5px]")}>{value}</span>
+      <button type="button" onClick={() => setShow((s) => !s)} className="text-white/40 hover:text-[#0d47a1]" aria-label={show ? "Hide" : "Reveal"}>
+        {show ? <EyeSlash size={15} weight="duotone" /> : <Eye size={15} weight="duotone" />}
+      </button>
+    </span>
+  );
 }
 
 export function ErrorNote({ message }: { message: string }) {
