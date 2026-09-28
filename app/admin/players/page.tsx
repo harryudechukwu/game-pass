@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { MagnifyingGlass as Search, CaretRight as ChevronRight, Gift } from "@phosphor-icons/react";
 import { api } from "@/lib/client";
 import { Loading } from "@/components/ui";
+import { Pager } from "@/components/admin/Pager";
 
 type Row = {
   id: string;
@@ -20,13 +21,16 @@ export default function AdminPlayersPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
 
-  async function load(query = "") {
-    const r = await api<{ players: Row[] }>(`/api/admin/players${query ? `?q=${encodeURIComponent(query)}` : ""}`);
-    setRows(r.players);
-  }
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
-  useEffect(() => { const t = setTimeout(() => load(q), 250); return () => clearTimeout(t); }, [q]);
+  const load = useCallback(async (query: string, p: number) => {
+    const params = new URLSearchParams({ page: String(p) });
+    if (query) params.set("q", query);
+    const r = await api<{ players: Row[]; pages: number }>(`/api/admin/players?${params}`);
+    setRows(r.players); setPages(r.pages);
+  }, []);
+  useEffect(() => { const t = setTimeout(() => load(q, page).finally(() => setLoading(false)), 200); return () => clearTimeout(t); }, [q, page, load]);
 
   return (
     <div className="space-y-5">
@@ -37,12 +41,13 @@ export default function AdminPlayersPage() {
 
       <div className="relative max-w-md">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
-        <input className="input pl-9" placeholder="Search by name or phone…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input pl-9" placeholder="Search by name or phone…" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
       </div>
 
       {loading ? (
         <Loading />
       ) : (
+        <>
         <div className="card divide-y divide-white/5">
           {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No members found.</p>}
           {rows.map((c) => (
@@ -63,6 +68,8 @@ export default function AdminPlayersPage() {
             </Link>
           ))}
         </div>
+        <Pager page={page} pages={pages} onPage={setPage} />
+        </>
       )}
     </div>
   );

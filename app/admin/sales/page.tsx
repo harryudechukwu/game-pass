@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pencil, Minus, Plus, Check, X, ClockCounterClockwise as History } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { timeAgo } from "@/lib/format";
 import { Loading, ErrorNote } from "@/components/ui";
+import { Pager } from "@/components/admin/Pager";
 
 type Sale = {
   id: string;
@@ -29,9 +30,14 @@ export default function AdminSalesPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
 
-  async function load() { setRows((await api<{ sales: Sale[] }>("/api/admin/sales")).sales); }
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  const load = useCallback(async (p = page) => {
+    const r = await api<{ sales: Sale[]; pages: number }>(`/api/admin/sales?page=${p}`);
+    setRows(r.sales); setPages(r.pages);
+  }, [page]);
+  useEffect(() => { load(page).finally(() => setLoading(false)); }, [load, page]);
 
   function startEdit(s: Sale) { setEditing(s.id); setQty(s.quantity); setError(""); }
 
@@ -112,6 +118,7 @@ export default function AdminSalesPage() {
           </div>
         ))}
       </div>
+      <Pager page={page} pages={pages} onPage={setPage} />
     </div>
   );
 }

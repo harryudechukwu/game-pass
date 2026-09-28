@@ -26,6 +26,11 @@ const firstNameOf = (name: string | null) => (name ? (name.trim().split(/\s+/)[0
 const ngn = (kobo: number) => money(kobo, "NGN");
 const durationLabel = (s: number) => (Math.round(s / 60) >= 1 ? `${Math.round(s / 60)} min` : `${s}s`);
 const normPhone = (v: unknown) => String(v ?? "").replace(/\s+/g, "");
+function pageParams(query: URLSearchParams, size: number) {
+  const page = Math.max(1, Math.floor(Number(query.get("page")) || 1));
+  return { page, size, skip: (page - 1) * size };
+}
+const pagesOf = (total: number, size: number) => Math.max(1, Math.ceil(total / size));
 
 // ── serializers ───────────────────────────────────────────────────────────
 function sGame(g: Game) {
@@ -256,6 +261,18 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
       throw new HttpError(409, "already_redeemed", "You've already redeemed this reward.");
     }
     return { redeemed: true, code, reward: { name: reward.name, description: reward.description } };
+  }
+
+  // member's full purchase history (paginated)
+  if (r[0] === "purchases" && method === "GET") {
+    const p = await requirePlayer(ctx, c);
+    const { page, size, skip } = pageParams(query, 15);
+    const filter = { playerId: p._id, voidedAt: null };
+    const [items, total] = await Promise.all([
+      c.purchases.find(filter).sort({ createdAt: -1 }).skip(skip).limit(size).toArray(),
+      c.purchases.countDocuments(filter),
+    ]);
+    return { purchases: items.map(sPurchase), total, page, pages: pagesOf(total, size) };
   }
 
   // ── attendant auth ──
@@ -751,11 +768,11 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     const spendMap = new Map(spendAgg.map((s) => [s._id as string, s.total as number]));
     const gpMap = new Map(gpAgg.map((s) => [s._id as string, s.n as number]));
     const redMap = new Map(redAgg.map((s) => [s._id as string, s.n as number]));
-    const rows = players
+    const { page, size, skip } = pageParams(query, 20);
+    const allRows = players
       .map((p) => ({ id: p._id, phone: p.phone, name: p.name, firstName: firstNameOf(p.name), spentKobo: spendMap.get(p._id) ?? 0, spentLabel: ngn(spendMap.get(p._id) ?? 0), gamesPlayed: gpMap.get(p._id) ?? 0, redemptions: redMap.get(p._id) ?? 0, createdAt: iso(p.createdAt) }))
-      .sort((a, z) => z.spentKobo - a.spentKobo)
-      .slice(0, 100);
-    return { players: rows };
+      .sort((a, z) => z.spentKobo - a.spentKobo);
+    return { players: allRows.slice(skip, skip + size), total: allRows.length, page, pages: pagesOf(allRows.length, size) };
   }
   if (r[1] === "players" && r[2] && method === "GET") {
     await requireAdmin(ctx, c); // managers may view members
@@ -786,7 +803,11 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   // sales — recent purchases that managers/admin can view and correct (attendant mistakes)
   if (r[1] === "sales" && !r[2] && method === "GET") {
     await requireAdmin(ctx, c);
-    const purchases = await c.purchases.find({}).sort({ createdAt: -1 }).limit(60).toArray();
+    const { page, size, skip } = pageParams(query, 20);
+    const [purchases, total] = await Promise.all([
+      c.purchases.find({}).sort({ createdAt: -1 }).skip(skip).limit(size).toArray(),
+      c.purchases.countDocuments({}),
+    ]);
     const ids = [...new Set(purchases.map((p) => p.playerId))];
     const players = await c.players.find({ _id: { $in: ids } }).toArray();
     const pmap = new Map(players.map((pl) => [pl._id, pl]));
@@ -803,6 +824,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
           voided: p.voidedAt != null, voidedByName: p.voidedByName ?? null,
         };
       }),
+      total, page, pages: pagesOf(total, size),
     };
   }
   if (r[1] === "sales" && r[2] && method === "PATCH") {
@@ -841,7 +863,11 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     await requireNonManager(ctx, c);
     const kind = query.get("kind");
     const filter = kind && kind !== "all" ? { kind: kind as "game" | "item" } : {};
-    const purchases = await c.purchases.find(filter).sort({ createdAt: -1 }).limit(200).toArray();
+    const { page, size, skip } = pageParams(query, 20);
+    const [purchases, total] = await Promise.all([
+      c.purchases.find(filter).sort({ createdAt: -1 }).skip(skip).limit(size).toArray(),
+      c.purchases.countDocuments(filter),
+    ]);
     const [players, attendants] = await Promise.all([
       c.players.find({ _id: { $in: [...new Set(purchases.map((p) => p.playerId))] } }).toArray(),
       c.attendants.find({ _id: { $in: [...new Set(purchases.map((p) => p.attendantId).filter(Boolean) as string[])] } }).toArray(),
@@ -854,6 +880,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
         player: { id: p.playerId, firstName: firstNameOf(pmap.get(p.playerId)?.name ?? null), phone: pmap.get(p.playerId)?.phone ?? "" },
         attendant: (p.attendantId && amap.get(p.attendantId)) || "—",
       })),
+      total, page, pages: pagesOf(total, size),
     };
   }
 

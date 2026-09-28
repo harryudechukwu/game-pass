@@ -5,6 +5,7 @@ import { clsx } from "clsx";
 import { api } from "@/lib/client";
 import { timeAgo, clockTime } from "@/lib/format";
 import { Loading } from "@/components/ui";
+import { Pager } from "@/components/admin/Pager";
 
 type Log = {
   id: string;
@@ -24,13 +25,17 @@ export default function AdminLogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
 
-  const load = useCallback(async (f: string) => {
-    const r = await api<{ logs: Log[] }>(`/api/admin/logs${f !== "all" ? `?kind=${f}` : ""}`);
-    setLogs(r.logs);
+  const load = useCallback(async (f: string, p: number) => {
+    const params = new URLSearchParams({ page: String(p) });
+    if (f !== "all") params.set("kind", f);
+    const r = await api<{ logs: Log[]; pages: number }>(`/api/admin/logs?${params}`);
+    setLogs(r.logs); setPages(r.pages);
   }, []);
 
-  useEffect(() => { setLoading(true); load(filter).finally(() => setLoading(false)); }, [filter, load]);
+  useEffect(() => { setLoading(true); load(filter, page).finally(() => setLoading(false)); }, [filter, page, load]);
 
   return (
     <div className="space-y-5">
@@ -41,7 +46,7 @@ export default function AdminLogsPage() {
 
       <div className="flex gap-2">
         {FILTERS.map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-[#5a95f2] font-semibold text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
+          <button key={f} onClick={() => { setFilter(f); setPage(1); }} className={clsx("rounded-lg px-3 py-1.5 text-sm capitalize", filter === f ? "bg-[#5a95f2] font-semibold text-white" : "bg-white/5 text-white/60 hover:bg-white/10")}>
             {f === "all" ? "All" : `${f}s`}
           </button>
         ))}
@@ -71,6 +76,7 @@ export default function AdminLogsPage() {
           ))}
         </div>
       )}
+      <Pager page={page} pages={pages} onPage={setPage} />
     </div>
   );
 }

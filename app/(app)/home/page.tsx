@@ -114,9 +114,9 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Recent activities */}
+        {/* Purchase history */}
         <div className="gp-sec">
-          <div className="gp-sec-head"><span className="gp-sec-title">Recent activities</span><Link href="/rewards" className="gp-seeall">See all</Link></div>
+          <div className="gp-sec-head"><span className="gp-sec-title">Purchase History</span><Link href="/purchases" className="gp-seeall">See all</Link></div>
           {feed.length > 0 ? (
             feed.slice(0, 8).map((p) => (
               <div key={p.id} className="gp-item">
