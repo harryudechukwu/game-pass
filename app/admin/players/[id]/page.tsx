@@ -13,6 +13,7 @@ type Detail = {
   player: { id: string; name: string | null; phone: string; spentLabel: string; gamesPlayed: number; createdAt: string };
   purchases: Purchase[];
   redemptions: { id: string; rewardName: string; code: string; redeemedAt: string }[];
+  dueRewards: { id: string; name: string; spendRequiredLabel: string; unlocked: boolean; redeemed: boolean; status: string }[];
 };
 
 export default function PlayerDetailPage() {
@@ -27,13 +28,13 @@ export default function PlayerDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Link href="/admin/players" className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={16} /> Players</Link>
+      <Link href="/admin/players" className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white"><ArrowLeft size={16} /> Members</Link>
 
       <div className="admin-head flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e3f3fd] text-xl font-black text-[#0d47a1]">{(p.name ?? p.phone).slice(0, 1).toUpperCase()}</div>
           <div>
-            <h1 className="text-2xl font-black">{p.name ?? "Unnamed player"}</h1>
+            <h1 className="text-2xl font-black">{p.name ?? "Unnamed member"}</h1>
             <p className="text-sm text-white/50">{p.phone} · {p.gamesPlayed} games · joined {timeAgo(p.createdAt)}</p>
           </div>
         </div>
@@ -71,6 +72,19 @@ export default function PlayerDetailPage() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <h2 className="mb-3 font-bold">Reward status</h2>
+        <div className="space-y-2">
+          {data.dueRewards.map((r) => (
+            <div key={r.id} className="flex items-center justify-between gap-2 text-sm">
+              <span className="truncate">{r.name} <span className="text-white/40">· {r.spendRequiredLabel}</span></span>
+              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${r.redeemed ? "bg-[#e3f3fd] text-[#0d47a1]" : r.unlocked ? "bg-emerald-400/15 text-emerald-500" : "text-white/45"}`}>{r.status}</span>
+            </div>
+          ))}
+          {data.dueRewards.length === 0 && <p className="text-sm text-white/40">No rewards set up.</p>}
         </div>
       </div>
     </div>

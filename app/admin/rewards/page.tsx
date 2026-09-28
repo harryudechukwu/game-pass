@@ -38,7 +38,7 @@ export default function AdminRewardsPage() {
       <div className="admin-head flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Rewards</h1>
-          <p className="text-sm text-white/50">Milestones unlocked once a player&apos;s total spend reaches the threshold.</p>
+          <p className="text-sm text-white/50">Milestones unlocked once a member&apos;s total spend reaches the threshold.</p>
         </div>
         <button className="btn-primary w-full md:w-auto" onClick={() => setEditing({ spendRequiredKobo: 500000, active: true })}><Plus size={18} /> New reward</button>
       </div>

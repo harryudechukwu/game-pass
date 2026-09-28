@@ -15,18 +15,18 @@ export const useAdmin = () => useContext(AdminCtx);
 const nav = [
   { href: "/admin/overview", label: "Overview", icon: ChartBar, roles: ["manager"] },
   { href: "/admin", label: "Dashboard", icon: SquaresFour, roles: ["admin", "staff"] },
-  { href: "/admin/analytics", label: "Analytics", icon: ChartLineUp, roles: ["admin", "staff"] },
+  { href: "/admin/analytics", label: "Analytics", icon: ChartLineUp, roles: ["admin", "staff", "manager"] },
   { href: "/admin/games", label: "Games", icon: GameController, roles: ["admin", "staff", "manager"] },
   { href: "/admin/items", label: "Items", icon: ShoppingBag, roles: ["admin", "staff", "manager"] },
   { href: "/admin/sales", label: "Sales", icon: Receipt, roles: ["admin", "staff", "manager"] },
   { href: "/admin/rewards", label: "Rewards", icon: Trophy, roles: ["admin", "staff"] },
-  { href: "/admin/attendants", label: "Attendants", icon: Scan, roles: ["admin", "staff"] },
+  { href: "/admin/attendants", label: "Attendants", icon: Scan, roles: ["admin", "staff", "manager"] },
   { href: "/admin/managers", label: "Managers", icon: UserGear, roles: ["admin"] },
-  { href: "/admin/players", label: "Players", icon: Users, roles: ["admin", "staff"] },
+  { href: "/admin/players", label: "Members", icon: Users, roles: ["admin", "staff", "manager"] },
   { href: "/admin/logs", label: "Logs", icon: ClockCounterClockwise, roles: ["admin", "staff"] },
 ];
 // managers get a limited console: only the catalogue pages
-const managerAllowed = (path: string) => path.startsWith("/admin/overview") || path.startsWith("/admin/games") || path.startsWith("/admin/items") || path.startsWith("/admin/sales");
+const managerAllowed = (path: string) => ["/admin/overview", "/admin/analytics", "/admin/games", "/admin/items", "/admin/sales", "/admin/attendants", "/admin/players"].some((p) => path.startsWith(p));
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();

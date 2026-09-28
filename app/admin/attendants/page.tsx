@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Scan, Plus, Trash as Trash2, X } from "@phosphor-icons/react";
+import { Scan, Plus, X, Clock } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { timeAgo } from "@/lib/format";
 import { Loading, ErrorNote, Reveal } from "@/components/ui";
 
-type Attendant = { id: string; name: string; username: string; password: string; createdAt: string };
+type Attendant = { id: string; name: string; username: string; password: string; active: boolean; graceUntil: number | null; createdAt: string };
 
 export default function AdminAttendantsPage() {
   const [rows, setRows] = useState<Attendant[]>([]);
@@ -17,10 +17,17 @@ export default function AdminAttendantsPage() {
   async function load() { setRows((await api<{ attendants: Attendant[] }>("/api/admin/attendants")).attendants); }
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
 
-  async function remove(a: Attendant) {
+  async function setActive(a: Attendant, active: boolean) {
     setError("");
-    try { await api(`/api/admin/attendants/${a.id}`, { method: "DELETE" }); await load(); }
-    catch (e) { setError(e instanceof ApiClientError ? e.message : "Delete failed."); }
+    try { await api(`/api/admin/attendants/${a.id}`, { method: "PATCH", body: { active } }); await load(); }
+    catch (e) { setError(e instanceof ApiClientError ? e.message : "Update failed."); }
+  }
+  async function grantGrace(a: Attendant) {
+    const mins = Number(prompt(`Grant ${a.name} how many extra minutes to finish logging sales?`, "30"));
+    if (!mins || mins < 1) return;
+    setError("");
+    try { await api(`/api/admin/attendants/${a.id}/grace`, { method: "POST", body: { minutes: mins } }); await load(); }
+    catch (e) { setError(e instanceof ApiClientError ? e.message : "Could not grant time."); }
   }
 
   if (loading) return <Loading />;
@@ -40,14 +47,20 @@ export default function AdminAttendantsPage() {
       <div className="card divide-y divide-white/5">
         {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No attendants yet.</p>}
         {rows.map((a) => (
-          <div key={a.id} className="flex items-center gap-4 px-4 py-3">
+          <div key={a.id} className={`flex items-center gap-4 px-4 py-3 ${a.active ? "" : "opacity-60"}`}>
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1]"><Scan size={20} weight="duotone" /></div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{a.name}</p>
+              <p className="flex items-center gap-2 truncate font-medium">{a.name}
+                {!a.active && <span className="pill">Inactive</span>}
+                {a.active && a.graceUntil != null && a.graceUntil > Date.now() && <span className="pill">+ extra time</span>}
+              </p>
               <p className="text-xs text-white/45">@{a.username} · added {timeAgo(a.createdAt)}</p>
               <div className="mt-1"><Reveal label="Password" value={a.password} /></div>
             </div>
-            <button className="btn-danger !px-2.5 !py-1.5" onClick={() => remove(a)} aria-label="Delete"><Trash2 size={14} /></button>
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              {a.active && <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={() => grantGrace(a)}><Clock size={13} /> Grant time</button>}
+              <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={() => setActive(a, !a.active)}>{a.active ? "Deactivate" : "Reactivate"}</button>
+            </div>
           </div>
         ))}
       </div>

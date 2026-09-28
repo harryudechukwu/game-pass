@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserGear, Plus, Trash as Trash2, X } from "@phosphor-icons/react";
+import { UserGear, Plus, X } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote, Reveal } from "@/components/ui";
 
-type Manager = { id: string; name: string; email: string; password: string };
+type Manager = { id: string; name: string; email: string; password: string; active: boolean };
 
 export default function AdminManagersPage() {
   const [rows, setRows] = useState<Manager[]>([]);
@@ -16,10 +16,10 @@ export default function AdminManagersPage() {
   async function load() { setRows((await api<{ managers: Manager[] }>("/api/admin/managers")).managers); }
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
 
-  async function remove(m: Manager) {
+  async function setActive(m: Manager, active: boolean) {
     setError("");
-    try { await api(`/api/admin/managers/${m.id}`, { method: "DELETE" }); await load(); }
-    catch (e) { setError(e instanceof ApiClientError ? e.message : "Delete failed."); }
+    try { await api(`/api/admin/managers/${m.id}`, { method: "PATCH", body: { active } }); await load(); }
+    catch (e) { setError(e instanceof ApiClientError ? e.message : "Update failed."); }
   }
 
   if (loading) return <Loading />;
@@ -39,14 +39,14 @@ export default function AdminManagersPage() {
       <div className="card divide-y divide-white/5">
         {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No managers yet.</p>}
         {rows.map((m) => (
-          <div key={m.id} className="flex items-center gap-4 px-4 py-3">
+          <div key={m.id} className={`flex items-center gap-4 px-4 py-3 ${m.active ? "" : "opacity-60"}`}>
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1]"><UserGear size={22} weight="duotone" /></div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{m.name}</p>
+              <p className="flex items-center gap-2 truncate font-medium">{m.name}{!m.active && <span className="pill">Inactive</span>}</p>
               <p className="text-xs text-white/45">{m.email}</p>
               <div className="mt-1"><Reveal label="Password" value={m.password} /></div>
             </div>
-            <button className="btn-danger !px-2.5 !py-1.5" onClick={() => remove(m)} aria-label="Delete"><Trash2 size={14} /></button>
+            <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={() => setActive(m, !m.active)}>{m.active ? "Deactivate" : "Reactivate"}</button>
           </div>
         ))}
       </div>

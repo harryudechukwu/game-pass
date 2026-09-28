@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import { money } from "@/lib/format";
 import { cols } from "@/lib/server/db";
 import { verifyPassword } from "@/lib/server/password";
+import { venueNow, venueDate, venueDayRange, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
 import type { SessionCtx } from "@/lib/server/session";
 import type { Attendant, Game, Item, Player, Purchase, Reward } from "@/lib/server/types";
 
@@ -25,20 +26,6 @@ const firstNameOf = (name: string | null) => (name ? (name.trim().split(/\s+/)[0
 const ngn = (kobo: number) => money(kobo, "NGN");
 const durationLabel = (s: number) => (Math.round(s / 60) >= 1 ? `${Math.round(s / 60)} min` : `${s}s`);
 const normPhone = (v: unknown) => String(v ?? "").replace(/\s+/g, "");
-const startOfToday = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-};
-// epoch-ms the given analysis window starts at (0 = all-time / cumulative)
-const periodSince = (period: string): number => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  if (period === "week") { d.setDate(d.getDate() - 6); return d.getTime(); }
-  if (period === "month") { d.setDate(d.getDate() - 29); return d.getTime(); }
-  if (period === "all") return 0;
-  return d.getTime(); // today
-};
 
 // ── serializers ───────────────────────────────────────────────────────────
 function sGame(g: Game) {
@@ -64,6 +51,7 @@ function sPurchase(p: Purchase) {
     id: p._id, kind: p.kind, name: p.name, icon: p.icon, amountKobo: p.amountKobo, amountLabel: ngn(p.amountKobo),
     quantity: p.quantity, createdAt: iso(p.createdAt), location: p.location,
     headsUpEndsAt: iso(p.headsUpEndsAt), mainEndsAt: iso(p.mainEndsAt), sessionStatus: gameStatus(p),
+    voided: p.voidedAt != null,
   };
 }
 function sPlayer(p: Player) {
@@ -74,14 +62,14 @@ function sPlayer(p: Player) {
 type Cols = Awaited<ReturnType<typeof cols>>;
 
 async function spentOf(c: Cols, playerId: string): Promise<number> {
-  const agg = await c.purchases.aggregate([{ $match: { playerId } }, { $group: { _id: null, total: { $sum: "$amountKobo" } } }]).toArray();
+  const agg = await c.purchases.aggregate([{ $match: { playerId, voidedAt: null } }, { $group: { _id: null, total: { $sum: "$amountKobo" } } }]).toArray();
   return agg[0]?.total ?? 0;
 }
 function gamesPlayedOf(c: Cols, playerId: string): Promise<number> {
-  return c.purchases.countDocuments({ playerId, kind: "game", mainEndsAt: { $lte: Date.now() } });
+  return c.purchases.countDocuments({ playerId, kind: "game", mainEndsAt: { $lte: Date.now() }, voidedAt: null });
 }
 function activeSessionsOf(c: Cols, playerId: string): Promise<Purchase[]> {
-  return c.purchases.find({ playerId, kind: "game", mainEndsAt: { $gt: Date.now() } }).sort({ mainEndsAt: 1 }).toArray();
+  return c.purchases.find({ playerId, kind: "game", mainEndsAt: { $gt: Date.now() }, voidedAt: null }).sort({ mainEndsAt: 1 }).toArray();
 }
 function activeRewards(c: Cols): Promise<Reward[]> {
   return c.rewards.find({ active: true }).sort({ spendRequiredKobo: 1 }).toArray();
@@ -118,6 +106,7 @@ async function requireAdmin(ctx: SessionCtx, c: Cols, minRole?: "admin" | "manag
   if (!ctx.adminId) throw new HttpError(401, "unauthorized", "Admin sign-in required.");
   const a = await c.admins.findOne({ _id: ctx.adminId });
   if (!a) throw new HttpError(401, "unauthorized", "Session no longer valid.");
+  if (a.active === false) throw new HttpError(403, "deactivated", "This account has been deactivated.");
   if (minRole && (ROLE_RANK[a.role] ?? 0) < ROLE_RANK[minRole]) {
     throw new HttpError(403, "forbidden", minRole === "admin" ? "This action requires an admin account." : "You don't have access to this.");
   }
@@ -133,7 +122,55 @@ async function requireAttendant(ctx: SessionCtx, c: Cols): Promise<Attendant> {
   if (!ctx.attendantId) throw new HttpError(401, "unauthorized", "Attendant sign-in required.");
   const a = await c.attendants.findOne({ _id: ctx.attendantId });
   if (!a) throw new HttpError(401, "unauthorized", "Session no longer valid.");
+  if (a.active === false) throw new HttpError(403, "deactivated", "This attendant account has been deactivated.");
   return a;
+}
+
+// attendant hours + sale-logging grace, all in venue-local time
+async function attHours(c: Cols) {
+  const s = await c.settings.findOne({ _id: "app" });
+  return { tz: s?.timezone || DEFAULT_TZ, open: s?.attendantOpenMin ?? 360, close: s?.attendantCloseMin ?? 1140, grace: s?.attendantGraceMin ?? 30 };
+}
+async function assertLoggingOpen(c: Cols, att: Attendant): Promise<void> {
+  const h = await attHours(c);
+  const now = Date.now();
+  const [dayStart] = venueDayRange(h.tz, venueNow(h.tz, now).date);
+  const openEpoch = dayStart + h.open * 60000;
+  const graceEpoch = dayStart + (h.close + h.grace) * 60000;
+  if (now >= openEpoch && now < graceEpoch) return; // open hours + default grace
+  if (att.graceUntil && now < att.graceUntil) return; // manager-granted grace
+  throw new HttpError(403, "logging_closed", "Sale logging is closed. Ask a manager for extra time to finish up.");
+}
+// purchase/redemption matching for the analytics/stats period: today | all | custom(days=YYYY-MM-DD,...)
+async function periodMatch(c: Cols, query: URLSearchParams) {
+  const raw = String(query.get("period") ?? "today");
+  const tz = (await attHours(c)).tz;
+  const all = raw === "all";
+  let days: string[] = [];
+  let ranges: [number, number][] = [];
+  if (!all) {
+    if (raw === "custom") days = String(query.get("days") ?? "").split(",").map((d) => d.trim()).filter(Boolean).slice(0, 62);
+    else days = [venueNow(tz).date];
+    ranges = days.map((d) => venueDayRange(tz, d));
+  }
+  const dateClause = (field: string): Record<string, unknown> => {
+    if (all) return {};
+    if (!ranges.length) return { _id: "__none__" }; // custom with no days selected → match nothing
+    if (ranges.length === 1) return { [field]: { $gte: ranges[0][0], $lt: ranges[0][1] } };
+    return { $or: ranges.map(([s, e]) => ({ [field]: { $gte: s, $lt: e } })) };
+  };
+  const period = all ? "all" : raw === "custom" ? "custom" : "today";
+  return { tz, period, days, all, ranges, dateClause, match: { voidedAt: null, ...dateClause("createdAt") } };
+}
+// list of venue dates (YYYY-MM-DD) from start..end inclusive, capped
+function venueDaysList(tz: string, startDate: string, endDate: string, cap = 92): string[] {
+  const out: string[] = [];
+  let cur = startDate;
+  for (let i = 0; i < cap && cur <= endDate; i++) {
+    out.push(cur);
+    cur = venueNow(tz, venueDayRange(tz, cur)[1] + 60000).date;
+  }
+  return out;
 }
 
 // ── router ────────────────────────────────────────────────────────────────
@@ -165,7 +202,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     const [rewards, redeemed, active] = await Promise.all([
       activeRewards(c),
       redeemedIds(c, p._id),
-      c.purchases.countDocuments({ playerId: p._id, kind: "game", mainEndsAt: { $gt: Date.now() } }),
+      c.purchases.countDocuments({ playerId: p._id, kind: "game", mainEndsAt: { $gt: Date.now() }, voidedAt: null }),
     ]);
     const claimable = rewards.filter((x) => spent >= x.spendRequiredKobo && !redeemed.has(x._id)).length;
     return { player: sPlayer(p), spentKobo: spent, spentLabel: ngn(spent), activeSessions: active, claimable };
@@ -176,7 +213,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     const spent = await spentOf(c, p._id);
     const [active, purchases, rewards, redeemed, gp] = await Promise.all([
       activeSessionsOf(c, p._id),
-      c.purchases.find({ playerId: p._id }).sort({ createdAt: -1 }).toArray(),
+      c.purchases.find({ playerId: p._id, voidedAt: null }).sort({ createdAt: -1 }).toArray(),
       activeRewards(c),
       redeemedIds(c, p._id),
       gamesPlayedOf(c, p._id),
@@ -225,6 +262,10 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   if (r[0] === "attendant" && r[1] === "login" && method === "POST") {
     const att = await c.attendants.findOne({ username: String(b.username ?? "").trim().toLowerCase() });
     if (!att || !verifyPassword(att.password, String(b.password ?? ""))) throw new HttpError(401, "invalid_credentials", "Incorrect username or password.");
+    if (att.active === false) throw new HttpError(403, "deactivated", "This attendant account has been deactivated. Ask your manager.");
+    const h = await attHours(c);
+    const nowMin = venueNow(h.tz).minutes;
+    if (nowMin < h.open || nowMin >= h.close) throw new HttpError(403, "access_denied", `Access denied — attendant login is open ${minutesLabel(h.open)}–${minutesLabel(h.close)}.`);
     return { attendant: { id: att._id, name: att.name, username: att.username } };
   }
   if (r[0] === "attendant" && r[1] === "logout" && method === "POST") return { loggedOut: true };
@@ -254,6 +295,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   }
   if (r[0] === "attendant" && r[1] === "purchase" && method === "POST") {
     const att = await requireAttendant(ctx, c);
+    await assertLoggingOpen(c, att);
     const phone = normPhone(b.phone);
     if (phone.length < 6) throw new HttpError(400, "validation_error", "Enter the player's phone number.");
     const kind = b.kind === "item" ? "item" : "game";
@@ -296,6 +338,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   // batch: record several games/items for one player in a single order
   if (r[0] === "attendant" && r[1] === "order" && method === "POST") {
     const att = await requireAttendant(ctx, c);
+    await assertLoggingOpen(c, att);
     const phone = normPhone(b.phone);
     if (phone.length < 6) throw new HttpError(400, "validation_error", "Enter the player's phone number.");
     const lines = Array.isArray(b.lines) ? (b.lines as Record<string, unknown>[]) : [];
@@ -370,6 +413,28 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     return { purchases: purchases.map((p) => ({ ...sPurchase(p), player: { firstName: firstNameOf(pmap.get(p.playerId)?.name ?? null), phone: pmap.get(p.playerId)?.phone ?? "" } })) };
   }
 
+  // member history for the attendant desk (purchases, balance = total spent, rewards)
+  if (r[0] === "attendant" && r[1] === "member" && method === "GET") {
+    await requireAttendant(ctx, c);
+    const phone = normPhone(query.get("phone"));
+    const p = await c.players.findOne({ phone });
+    if (!p) throw new HttpError(404, "member_not_found", "No member with that phone number.");
+    const [spent, gp, purchases, redDocs, rewards] = await Promise.all([
+      spentOf(c, p._id),
+      gamesPlayedOf(c, p._id),
+      c.purchases.find({ playerId: p._id, voidedAt: null }).sort({ createdAt: -1 }).limit(50).toArray(),
+      c.redemptions.find({ playerId: p._id }).toArray(),
+      activeRewards(c),
+    ]);
+    const redMap = new Map(redDocs.map((d) => [d.rewardId, d]));
+    const rewardList = rewards.map((x) => {
+      const red = redMap.get(x._id);
+      const unlocked = spent >= x.spendRequiredKobo;
+      return { id: x._id, name: x.name, spendRequiredLabel: ngn(x.spendRequiredKobo), unlocked, redeemed: !!red, code: red?.code ?? null, status: red?.fulfilledAt ? "Given" : red ? "Redeemed" : unlocked ? "Ready to redeem" : `${ngn(x.spendRequiredKobo - spent)} to go` };
+    });
+    return { member: { ...sPlayer(p), spentKobo: spent, spentLabel: ngn(spent), gamesPlayed: gp }, purchases: purchases.map(sPurchase), rewards: rewardList };
+  }
+
   if (r[0] === "admin") return adminApi(c, r, method, b, query, ctx);
 
   throw new HttpError(404, "not_found", `No handler for ${method} /${r.join("/")}`);
@@ -379,6 +444,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   if (r[1] === "login" && method === "POST") {
     const admin = await c.admins.findOne({ email: String(b.email ?? "").toLowerCase() });
     if (!admin || !verifyPassword(admin.password, String(b.password ?? ""))) throw new HttpError(401, "invalid_credentials", "Incorrect email or password.");
+    if (admin.active === false) throw new HttpError(403, "deactivated", "This account has been deactivated.");
     return { admin: { id: admin._id, name: admin.name, email: admin.email, role: admin.role } };
   }
   if (r[1] === "logout" && method === "POST") return { loggedOut: true };
@@ -390,31 +456,32 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   if (r[1] === "settings" && method === "GET") {
     await requireNonManager(ctx, c);
     const s = await c.settings.findOne({ _id: "app" });
-    return { headsUpSeconds: s?.headsUpSeconds ?? 60 };
+    return { headsUpSeconds: s?.headsUpSeconds ?? 60, attendantOpenMin: s?.attendantOpenMin ?? 360, attendantCloseMin: s?.attendantCloseMin ?? 1140, attendantGraceMin: s?.attendantGraceMin ?? 30, timezone: s?.timezone || DEFAULT_TZ };
   }
   if (r[1] === "settings" && method === "PATCH") {
     await requireNonManager(ctx, c);
-    if ("headsUpSeconds" in b) {
-      const v = Math.max(0, Math.min(600, Math.floor(Number(b.headsUpSeconds))));
-      await c.settings.updateOne({ _id: "app" }, { $set: { headsUpSeconds: v } }, { upsert: true });
-    }
+    const set: Record<string, unknown> = {};
+    if ("headsUpSeconds" in b) set.headsUpSeconds = Math.max(0, Math.min(600, Math.floor(Number(b.headsUpSeconds))));
+    if ("attendantOpenMin" in b) set.attendantOpenMin = Math.max(0, Math.min(1439, Math.floor(Number(b.attendantOpenMin))));
+    if ("attendantCloseMin" in b) set.attendantCloseMin = Math.max(0, Math.min(1439, Math.floor(Number(b.attendantCloseMin))));
+    if ("attendantGraceMin" in b) set.attendantGraceMin = Math.max(0, Math.min(240, Math.floor(Number(b.attendantGraceMin))));
+    if ("timezone" in b && String(b.timezone).trim()) set.timezone = String(b.timezone).trim();
+    if (Object.keys(set).length) await c.settings.updateOne({ _id: "app" }, { $set: set }, { upsert: true });
     const s = await c.settings.findOne({ _id: "app" });
-    return { headsUpSeconds: s?.headsUpSeconds ?? 60 };
+    return { headsUpSeconds: s?.headsUpSeconds ?? 60, attendantOpenMin: s?.attendantOpenMin ?? 360, attendantCloseMin: s?.attendantCloseMin ?? 1140, attendantGraceMin: s?.attendantGraceMin ?? 30, timezone: s?.timezone || DEFAULT_TZ };
   }
 
   // full analysis for admin/staff — figures scoped to ?period=today|week|month|all
   if (r[1] === "stats" && method === "GET") {
     await requireNonManager(ctx, c);
-    const period = String(query.get("period") ?? "today");
-    const since = periodSince(period);
+    const { match, dateClause, period } = await periodMatch(c, query);
     const now = Date.now();
-    const matchPeriod = since ? { createdAt: { $gte: since } } : {};
     const [totalPlayers, periodPurchases, popularAgg, activeSessions, rewardsRedeemed, settings] = await Promise.all([
       c.players.estimatedDocumentCount(),
-      c.purchases.find(matchPeriod).toArray(),
-      c.purchases.aggregate([{ $match: { kind: "game", ...matchPeriod } }, { $group: { _id: "$refId", plays: { $sum: 1 } } }, { $sort: { plays: -1 } }, { $limit: 5 }]).toArray(),
-      c.purchases.countDocuments({ kind: "game", mainEndsAt: { $gt: now } }),
-      c.redemptions.countDocuments(since ? { redeemedAt: { $gte: since } } : {}),
+      c.purchases.find(match).toArray(),
+      c.purchases.aggregate([{ $match: { kind: "game", ...match } }, { $group: { _id: "$refId", plays: { $sum: 1 } } }, { $sort: { plays: -1 } }, { $limit: 5 }]).toArray(),
+      c.purchases.countDocuments({ kind: "game", mainEndsAt: { $gt: now }, voidedAt: null }),
+      c.redemptions.countDocuments(dateClause("redeemedAt")),
       c.settings.findOne({ _id: "app" }),
     ]);
     const games = await c.games.find({ _id: { $in: popularAgg.map((x) => x._id as string) } }).toArray();
@@ -435,12 +502,13 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   // limited daily overview — managers may see it (today only, no all-time revenue)
   if (r[1] === "overview" && method === "GET") {
     await requireAdmin(ctx, c);
-    const t0 = startOfToday();
+    const h = await attHours(c);
+    const [t0, t1] = venueDayRange(h.tz, venueNow(h.tz).date);
     const now = Date.now();
     const [todayPurchases, activeSessions, rewardsToday] = await Promise.all([
-      c.purchases.find({ createdAt: { $gte: t0 } }).toArray(),
-      c.purchases.countDocuments({ kind: "game", mainEndsAt: { $gt: now } }),
-      c.redemptions.countDocuments({ redeemedAt: { $gte: t0 } }),
+      c.purchases.find({ createdAt: { $gte: t0, $lt: t1 }, voidedAt: null }).toArray(),
+      c.purchases.countDocuments({ kind: "game", mainEndsAt: { $gt: now }, voidedAt: null }),
+      c.redemptions.countDocuments({ redeemedAt: { $gte: t0, $lt: t1 } }),
     ]);
     const revToday = todayPurchases.reduce((n, p) => n + p.amountKobo, 0);
     return {
@@ -454,31 +522,28 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
 
   // deep analytics for admin/staff — trends, top sellers, staff & customers
   if (r[1] === "analytics" && method === "GET") {
-    await requireNonManager(ctx, c);
-    const period = String(query.get("period") ?? "week");
-    const since = periodSince(period);
+    await requireAdmin(ctx, c); // managers may see analytics
+    const { match, tz, period, days, all, ranges } = await periodMatch(c, query);
     const now = Date.now();
-    const purchases = await c.purchases.find(since ? { createdAt: { $gte: since } } : {}).toArray();
+    const purchases = await c.purchases.find(match).toArray();
 
-    // daily trend buckets (capped so "all time" can't explode)
-    const DAY = 86400000;
-    const firstTs = purchases.length ? Math.min(...purchases.map((p) => p.createdAt)) : now;
-    let startDay = new Date(since || firstTs); startDay.setHours(0, 0, 0, 0);
-    const todayDay = new Date(); todayDay.setHours(0, 0, 0, 0);
-    if ((todayDay.getTime() - startDay.getTime()) / DAY > 90) startDay = new Date(todayDay.getTime() - 90 * DAY);
-    const bmap = new Map<number, { rev: number; games: number; items: number }>();
+    // trend buckets keyed by venue-local day
+    const bmap = new Map<string, { rev: number; games: number; items: number }>();
     for (const p of purchases) {
-      const d = new Date(p.createdAt); d.setHours(0, 0, 0, 0);
-      const b = bmap.get(d.getTime()) ?? { rev: 0, games: 0, items: 0 };
+      const d = venueDate(tz, p.createdAt);
+      const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0 };
       b.rev += p.amountKobo;
       if (p.kind === "game") b.games += 1; else b.items += p.quantity;
-      bmap.set(d.getTime(), b);
+      bmap.set(d, b);
     }
-    const trends: { date: string; revenueKobo: number; revenueLabel: string; games: number; items: number }[] = [];
-    for (let t = startDay.getTime(); t <= todayDay.getTime(); t += DAY) {
-      const b = bmap.get(t) ?? { rev: 0, games: 0, items: 0 };
-      trends.push({ date: new Date(t).toISOString(), revenueKobo: b.rev, revenueLabel: money(b.rev, "NGN"), games: b.games, items: b.items });
+    let axis: string[];
+    if (all) {
+      const first = purchases.length ? purchases.reduce((m, p) => Math.min(m, p.createdAt), now) : now;
+      axis = venueDaysList(tz, venueDate(tz, first), venueNow(tz, now).date);
+    } else {
+      axis = [...days].sort();
     }
+    const trends = axis.map((d) => { const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0 }; return { date: d, revenueKobo: b.rev, revenueLabel: money(b.rev, "NGN"), games: b.games, items: b.items }; });
 
     // top games / items
     const gStats = new Map<string, { name: string; plays: number; rev: number }>();
@@ -523,12 +588,12 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     let newCount = 0, returningCount = 0;
     for (const pid of playerIds) {
       const pl = pmap.get(pid);
-      if (since && pl && pl.createdAt >= since) newCount += 1; else returningCount += 1;
+      if (pl && !all && ranges.some(([s, e]) => pl.createdAt >= s && pl.createdAt < e)) newCount += 1; else returningCount += 1;
     }
     const topSpenders = playerIds.map((pid) => { const pl = pmap.get(pid); return { name: pl?.name ?? pl?.phone ?? "Guest", revenueKobo: spend.get(pid) ?? 0 }; }).sort((a, b) => b.revenueKobo - a.revenueKobo).slice(0, 6).map((s) => ({ name: s.name, revenueKobo: s.revenueKobo, revenueLabel: money(s.revenueKobo, "NGN") }));
 
     return {
-      period,
+      period, days,
       totalRevenueLabel: money(gamesKobo + itemsKobo, "NGN"),
       trends, topGames, topItems,
       categorySplit: { kidsKobo, teenKobo, kidsLabel: money(kidsKobo, "NGN"), teenLabel: money(teenKobo, "NGN") },
@@ -616,30 +681,41 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   if (r[1] === "attendants" && !r[2] && method === "GET") {
     await requireAdmin(ctx, c);
     const atts = await c.attendants.find({}).sort({ createdAt: -1 }).toArray();
-    return { attendants: atts.map((a) => ({ id: a._id, name: a.name, username: a.username, password: a.password, createdAt: iso(a.createdAt) })) };
+    return { attendants: atts.map((a) => ({ id: a._id, name: a.name, username: a.username, password: a.password, active: a.active !== false, graceUntil: a.graceUntil ?? null, createdAt: iso(a.createdAt) })) };
   }
   if (r[1] === "attendants" && !r[2] && method === "POST") {
-    await requireAdmin(ctx, c, "admin");
+    await requireAdmin(ctx, c); // admin, staff or manager may add attendants
     const name = String(b.name ?? "").trim();
     const username = String(b.username ?? "").trim().toLowerCase();
     const password = String(b.password ?? "");
     if (!name || !username || !password) throw new HttpError(400, "validation_error", "Name, username and password are all required.");
     if (await c.attendants.findOne({ username })) throw new HttpError(409, "username_taken", "That username is already taken.");
-    const att: Attendant = { _id: newId("att"), name, username, password, createdAt: Date.now() };
+    const att: Attendant = { _id: newId("att"), name, username, password, active: true, createdAt: Date.now() };
     await c.attendants.insertOne(att);
-    return { attendant: { id: att._id, name: att.name, username: att.username, createdAt: iso(att.createdAt) } };
+    return { attendant: { id: att._id, name: att.name, username: att.username, active: true, createdAt: iso(att.createdAt) } };
   }
-  if (r[1] === "attendants" && r[2] && method === "DELETE") {
-    await requireAdmin(ctx, c, "admin");
-    await c.attendants.deleteOne({ _id: r[2] });
-    return { deleted: true };
+  // manager/admin grant a one-off grace window for an attendant to finish logging
+  if (r[1] === "attendants" && r[2] && r[3] === "grace" && method === "POST") {
+    await requireAdmin(ctx, c);
+    const minutes = Math.max(1, Math.min(240, Math.floor(Number(b.minutes ?? 30)) || 30));
+    const until = Date.now() + minutes * 60000;
+    const res = await c.attendants.findOneAndUpdate({ _id: r[2] }, { $set: { graceUntil: until } }, { returnDocument: "after" });
+    if (!res) throw new HttpError(404, "not_found", "Attendant not found.");
+    return { graceUntil: until, minutes };
+  }
+  // activate / deactivate (soft delete — we keep former-employee records)
+  if (r[1] === "attendants" && r[2] && method === "PATCH") {
+    await requireAdmin(ctx, c);
+    const res = await c.attendants.findOneAndUpdate({ _id: r[2] }, { $set: { active: b.active !== false } }, { returnDocument: "after" });
+    if (!res) throw new HttpError(404, "not_found", "Attendant not found.");
+    return { attendant: { id: res._id, active: res.active !== false } };
   }
 
   // managers — limited operators, stored as admin docs with role "manager" (admin only)
   if (r[1] === "managers" && !r[2] && method === "GET") {
     await requireAdmin(ctx, c, "admin");
     const mgrs = await c.admins.find({ role: "manager" }).toArray();
-    return { managers: mgrs.map((m) => ({ id: m._id, name: m.name, email: m.email, password: m.password })) };
+    return { managers: mgrs.map((m) => ({ id: m._id, name: m.name, email: m.email, password: m.password, active: m.active !== false })) };
   }
   if (r[1] === "managers" && !r[2] && method === "POST") {
     await requireAdmin(ctx, c, "admin");
@@ -648,27 +724,28 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     const password = String(b.password ?? "");
     if (!name || !email || !password) throw new HttpError(400, "validation_error", "Name, email and password are all required.");
     if (await c.admins.findOne({ email })) throw new HttpError(409, "email_taken", "That email is already in use.");
-    const mgr = { _id: newId("mgr"), name, email, password, role: "manager" };
+    const mgr = { _id: newId("mgr"), name, email, password, role: "manager", active: true };
     await c.admins.insertOne(mgr);
     return { manager: { id: mgr._id, name: mgr.name, email: mgr.email } };
   }
-  if (r[1] === "managers" && r[2] && method === "DELETE") {
+  if (r[1] === "managers" && r[2] && method === "PATCH") {
     await requireAdmin(ctx, c, "admin");
-    await c.admins.deleteOne({ _id: r[2], role: "manager" });
-    return { deleted: true };
+    const res = await c.admins.findOneAndUpdate({ _id: r[2], role: "manager" }, { $set: { active: b.active !== false } }, { returnDocument: "after" });
+    if (!res) throw new HttpError(404, "not_found", "Manager not found.");
+    return { manager: { id: res._id, active: res.active !== false } };
   }
 
   // players
   if (r[1] === "players" && !r[2] && method === "GET") {
-    await requireNonManager(ctx, c);
+    await requireAdmin(ctx, c); // managers may view members
     const q = (query.get("q") ?? "").trim();
     // escape regex metacharacters so a search term can't inject a costly/greedy pattern
     const rx = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const filter = q ? { $or: [{ name: { $regex: rx, $options: "i" } }, { phone: { $regex: rx } }] } : {};
     const [players, spendAgg, gpAgg, redAgg] = await Promise.all([
       c.players.find(filter).limit(300).toArray(),
-      c.purchases.aggregate([{ $group: { _id: "$playerId", total: { $sum: "$amountKobo" } } }]).toArray(),
-      c.purchases.aggregate([{ $match: { kind: "game", mainEndsAt: { $lte: Date.now() } } }, { $group: { _id: "$playerId", n: { $sum: 1 } } }]).toArray(),
+      c.purchases.aggregate([{ $match: { voidedAt: null } }, { $group: { _id: "$playerId", total: { $sum: "$amountKobo" } } }]).toArray(),
+      c.purchases.aggregate([{ $match: { kind: "game", mainEndsAt: { $lte: Date.now() }, voidedAt: null } }, { $group: { _id: "$playerId", n: { $sum: 1 } } }]).toArray(),
       c.redemptions.aggregate([{ $group: { _id: "$playerId", n: { $sum: 1 } } }]).toArray(),
     ]);
     const spendMap = new Map(spendAgg.map((s) => [s._id as string, s.total as number]));
@@ -681,20 +758,27 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     return { players: rows };
   }
   if (r[1] === "players" && r[2] && method === "GET") {
-    await requireNonManager(ctx, c);
+    await requireAdmin(ctx, c); // managers may view members
     const p = await c.players.findOne({ _id: r[2] });
-    if (!p) throw new HttpError(404, "player_not_found", "Player not found.");
-    const [spent, gp, purchases, reds] = await Promise.all([
+    if (!p) throw new HttpError(404, "player_not_found", "Member not found.");
+    const [spent, gp, purchases, reds, allRewards] = await Promise.all([
       spentOf(c, p._id), gamesPlayedOf(c, p._id),
       c.purchases.find({ playerId: p._id }).sort({ createdAt: -1 }).toArray(),
       c.redemptions.find({ playerId: p._id }).sort({ redeemedAt: -1 }).toArray(),
+      activeRewards(c),
     ]);
-    const rewards = await c.rewards.find({ _id: { $in: reds.map((x) => x.rewardId) } }).toArray();
-    const rmap = new Map(rewards.map((x) => [x._id, x.name]));
+    const rmap = new Map(allRewards.map((x) => [x._id, x.name]));
+    const redSet = new Map(reds.map((x) => [x.rewardId, x]));
+    const dueRewards = allRewards.map((x) => {
+      const red = redSet.get(x._id);
+      const unlocked = spent >= x.spendRequiredKobo;
+      return { id: x._id, name: x.name, spendRequiredLabel: ngn(x.spendRequiredKobo), unlocked, redeemed: !!red, status: red?.fulfilledAt ? "Given" : red ? "Redeemed" : unlocked ? "Ready to redeem" : `${ngn(x.spendRequiredKobo - spent)} to go` };
+    });
     return {
       player: { ...sPlayer(p), spentKobo: spent, spentLabel: ngn(spent), gamesPlayed: gp },
       purchases: purchases.map(sPurchase),
       redemptions: reds.map((x) => ({ id: x._id, rewardName: rmap.get(x.rewardId) ?? "—", code: x.code, redeemedAt: iso(x.redeemedAt) })),
+      dueRewards,
     };
   }
 
@@ -716,6 +800,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
           edited: p.editedAt != null, editedByName: p.editedByName ?? null,
           originalQuantity: p.originalQuantity ?? null,
           originalAmountLabel: p.originalAmountKobo != null ? ngn(p.originalAmountKobo) : null,
+          voided: p.voidedAt != null, voidedByName: p.voidedByName ?? null,
         };
       }),
     };
@@ -735,6 +820,21 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     }
     await c.purchases.updateOne({ _id: r[2] }, { $set: set });
     return { ok: true };
+  }
+  // void a sale (manager/admin) — kept for audit, removed from revenue & spend
+  if (r[1] === "sales" && r[2] && r[3] === "void" && method === "POST") {
+    const me = await requireAdmin(ctx, c);
+    const purchase = await c.purchases.findOne({ _id: r[2] });
+    if (!purchase) throw new HttpError(404, "not_found", "Sale not found.");
+    if (purchase.voidedAt) return { ok: true, alreadyVoided: true };
+    const set: Record<string, unknown> = { voidedAt: Date.now(), voidedByName: me.name };
+    if (purchase.kind === "game" && purchase.mainEndsAt && purchase.mainEndsAt > Date.now()) set.mainEndsAt = Date.now(); // stop a live timer
+    await c.purchases.updateOne({ _id: r[2] }, { $set: set });
+    const spent = await spentOf(c, purchase.playerId);
+    const reds = await c.redemptions.find({ playerId: purchase.playerId }).toArray();
+    const rwds = reds.length ? await c.rewards.find({ _id: { $in: reds.map((x) => x.rewardId) } }).toArray() : [];
+    const shortfall = rwds.filter((rw) => spent < rw.spendRequiredKobo).map((rw) => rw.name);
+    return { ok: true, warning: shortfall.length ? `Heads up: this member is now below the threshold for already-claimed reward(s): ${shortfall.join(", ")}.` : null };
   }
 
   if (r[1] === "logs" && method === "GET") {

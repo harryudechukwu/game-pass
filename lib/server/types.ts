@@ -53,6 +53,9 @@ export type Purchase = {
   editedByName?: string | null;
   originalQuantity?: number | null;
   originalAmountKobo?: number | null;
+  // void (manager/admin) — kept for audit but excluded from revenue & spend
+  voidedAt?: number | null;
+  voidedByName?: string | null;
 };
 
 export type Reward = {
@@ -67,8 +70,16 @@ export type Reward = {
 
 export type Redemption = { _id: string; playerId: string; rewardId: string; code: string; redeemedAt: number; fulfilledAt?: number | null; fulfilledByName?: string | null };
 
-export type Admin = { _id: string; email: string; name: string; password: string; role: string };
+export type Admin = { _id: string; email: string; name: string; password: string; role: string; active?: boolean };
 
-export type Attendant = { _id: string; name: string; username: string; password: string; createdAt: number };
+export type Attendant = { _id: string; name: string; username: string; password: string; createdAt: number; active?: boolean; graceUntil?: number | null };
 
-export type Settings = { _id: string; headsUpSeconds: number };
+export type Settings = {
+  _id: string;
+  headsUpSeconds: number;
+  // attendant login window & sale-logging grace, in venue-local time
+  attendantOpenMin?: number; // minutes since midnight (default 360 = 6:00)
+  attendantCloseMin?: number; // default 1140 = 19:00
+  attendantGraceMin?: number; // default 30
+  timezone?: string; // IANA tz (default Africa/Lagos)
+};

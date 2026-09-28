@@ -54,7 +54,7 @@ async function ensureSeed(db: Db): Promise<void> {
   if (email && password) {
     await admins.updateOne(
       { email },
-      { $set: { name: process.env.ADMIN_NAME?.trim() || "Administrator", password: hashPassword(password), role: "admin" }, $setOnInsert: { _id: id("adm") } },
+      { $set: { name: process.env.ADMIN_NAME?.trim() || "Administrator", password: hashPassword(password), role: "admin", active: true }, $setOnInsert: { _id: id("adm") } },
       { upsert: true },
     );
     // The env admin is the sole owner login — drop any other admin/staff
@@ -70,6 +70,7 @@ async function ensureSeed(db: Db): Promise<void> {
       name: "Front Desk",
       username: "frontdesk",
       password: "attend1234",
+      active: true,
       createdAt: Date.now(),
     });
   }
@@ -81,9 +82,9 @@ async function seed(db: Db): Promise<void> {
   // Dev fallback only (used when no ADMIN_* env is set). Passwords are hashed;
   // these demo logins should be overridden via env or removed in production.
   await db.collection<Admin>("admins").insertMany([
-    { _id: id("adm"), email: "admin@arcade.test", name: "Arcade Admin", password: hashPassword("admin1234"), role: "admin" },
-    { _id: id("adm"), email: "staff@arcade.test", name: "Front Desk", password: hashPassword("staff1234"), role: "staff" },
+    { _id: id("adm"), email: "admin@arcade.test", name: "Arcade Admin", password: hashPassword("admin1234"), role: "admin", active: true },
+    { _id: id("adm"), email: "staff@arcade.test", name: "Front Desk", password: hashPassword("staff1234"), role: "staff", active: true },
   ]);
 
-  await db.collection<Settings>("settings").updateOne({ _id: "app" }, { $set: { headsUpSeconds: 60 } }, { upsert: true });
+  await db.collection<Settings>("settings").updateOne({ _id: "app" }, { $set: { headsUpSeconds: 60, attendantOpenMin: 360, attendantCloseMin: 1140, attendantGraceMin: 30, timezone: "Africa/Lagos" } }, { upsert: true });
 }

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, List, IconContext } from "@phosphor-icons/react";
+import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, List, ClockCounterClockwise, IconContext } from "@phosphor-icons/react";
+import Link from "next/link";
 import { X } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
 import { money } from "@/lib/format";
@@ -176,7 +177,7 @@ export default function AttendantPage() {
           <div className="card mx-auto max-w-lg border-2 border-emerald-400/30 p-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300"><Check size={34} /></div>
             <h1 className="text-2xl font-black">Order logged</h1>
-            <p className="mt-1 text-white/60">{result.purchases.length} item{result.purchases.length > 1 ? "s" : ""} for <b className="text-white">{result.player.firstName ?? result.player.phone}</b>{result.isNewPlayer && " (new player)"}.</p>
+            <p className="mt-1 text-white/60">{result.purchases.length} item{result.purchases.length > 1 ? "s" : ""} for <b className="text-white">{result.player.firstName ?? result.player.phone}</b>{result.isNewPlayer && " (new member)"}.</p>
             <div className="mx-auto mt-4 max-w-sm space-y-1 rounded-xl border border-white/10 bg-white/5 p-3 text-left text-sm">
               {result.purchases.map((p, i) => (
                 <div key={i} className="flex items-center justify-between gap-2">
@@ -201,7 +202,7 @@ export default function AttendantPage() {
             {error && <div className="mt-4"><ErrorNote message={error} /></div>}
             <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-white/50">Player</span>
+                <span className="text-white/50">Member</span>
                 <span className="font-semibold">{lookup?.player?.firstName ?? phone}{lookup && !lookup.found ? " · new guest" : ""}</span>
               </div>
               <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
@@ -217,7 +218,7 @@ export default function AttendantPage() {
               </div>
             </div>
             {cart.some((l) => l.kind === "game") && (
-              <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300"><Timer size={13} className="mr-1 inline" /> Game timers start after a {headsUp}s heads-up on the player&apos;s phone.</p>
+              <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300"><Timer size={13} className="mr-1 inline" /> Game timers start after a {headsUp}s heads-up on the member&apos;s phone.</p>
             )}
             <div className="mt-6 flex gap-3">
               <button className="btn-ghost flex-1" onClick={() => setReview(false)} disabled={busy}>Back to edit</button>
@@ -256,15 +257,18 @@ export default function AttendantPage() {
             {/* Left: player + catalogue */}
             <div className="space-y-4">
               <div className="card p-5">
-                <h2 className="mb-3 font-bold">1 · Player phone number</h2>
+                <h2 className="mb-3 font-bold">1 · Member phone number</h2>
                 <div className="relative">
                   <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
                   <input className="input pl-9 text-lg" inputMode="tel" placeholder="e.g. 08012345678" value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus />
                 </div>
                 {lookup && (
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     {lookup.found && lookup.player ? (
-                      <span className="pill"><Check size={14} /> Registered</span>
+                      <>
+                        <span className="pill"><Check size={14} /> Registered</span>
+                        <Link href={`/attendant/history/${encodeURIComponent(phone.replace(/\s+/g, ""))}`} className="inline-flex items-center gap-1.5 rounded-lg border border-b-[3px] border-[#dfe3e9] bg-white px-3 py-1.5 text-sm font-semibold text-[#0d47a1]"><ClockCounterClockwise size={15} /> View history</Link>
+                      </>
                     ) : (
                       <span className="pill"><UserPlus size={14} /> New guest</span>
                     )}
@@ -332,7 +336,7 @@ export default function AttendantPage() {
                       <span className="text-2xl font-black text-[#0d47a1]">{money(total, "NGN")}</span>
                     </div>
                     {cart.some((l) => l.kind === "game") && (
-                      <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Game timers start after a {headsUp}s heads-up on the player&apos;s phone.</p>
+                      <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Game timers start after a {headsUp}s heads-up on the member&apos;s phone.</p>
                     )}
                     <button className="btn-primary w-full py-4" disabled={phone.replace(/\s+/g, "").length < 6} onClick={() => { setError(""); setReview(true); }}>
                       Review order

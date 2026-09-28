@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import { DownloadSimple } from "@phosphor-icons/react";
 import { api } from "@/lib/client";
 import { Loading } from "@/components/ui";
+import { PeriodPicker } from "@/components/admin/PeriodPicker";
 
 type NameRev = { name: string; revenueKobo: number; revenueLabel: string };
 type Analytics = {
   period: string;
+  days: string[];
   totalRevenueLabel: string;
   trends: { date: string; revenueKobo: number; revenueLabel: string; games: number; items: number }[];
   topGames: (NameRev & { plays: number })[];
@@ -20,14 +22,7 @@ type Analytics = {
   topSpenders: NameRev[];
 };
 
-const PERIODS = [
-  { key: "today", label: "Today" },
-  { key: "week", label: "7 days" },
-  { key: "month", label: "30 days" },
-  { key: "all", label: "All time" },
-];
-
-const fmtDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+const fmtDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 // plain-English summary of the window, for the report/PDF
 function buildSummary(d: Analytics, periodLabel: string): string[] {
@@ -41,7 +36,7 @@ function buildSummary(d: Analytics, periodLabel: string): string[] {
   if (d.topGames[0]) lines.push(`The most popular game was ${d.topGames[0].name} with ${d.topGames[0].plays} play${d.topGames[0].plays === 1 ? "" : "s"} (${d.topGames[0].revenueLabel}).`);
   if (d.topItems[0]) lines.push(`The best-selling item was ${d.topItems[0].name} (${d.topItems[0].revenueLabel}).`);
   if (busiest && busiest.revenueKobo > 0) lines.push(`The busiest day was ${fmtDay(busiest.date)}, taking ${busiest.revenueLabel}.`);
-  lines.push(`${d.newCount} new player${d.newCount === 1 ? "" : "s"} joined this window and ${d.returningCount} returned.`);
+  lines.push(`${d.newCount} new member${d.newCount === 1 ? "" : "s"} joined this window and ${d.returningCount} returned.`);
   if (d.topSpenders[0]) lines.push(`The top spender was ${d.topSpenders[0].name} (${d.topSpenders[0].revenueLabel}).`);
   return lines;
 }
@@ -81,14 +76,16 @@ function SplitBar({ a, b }: { a: { label: string; value: number; money: string }
 export default function AnalyticsPage() {
   const [data, setData] = useState<Analytics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState("week");
+  const [period, setPeriod] = useState("today");
+  const [days, setDays] = useState<string[]>([]);
 
   useEffect(() => {
     setLoading(true);
-    api<Analytics>(`/api/admin/analytics?period=${period}`).then(setData).finally(() => setLoading(false));
-  }, [period]);
+    const qs = period === "custom" ? `custom&days=${days.join(",")}` : period;
+    api<Analytics>(`/api/admin/analytics?period=${qs}`).then(setData).finally(() => setLoading(false));
+  }, [period, days]);
 
-  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "";
+  const periodLabel = period === "all" ? "All time" : period === "custom" ? (days.length === 1 ? days[0] : `${days.length} selected days`) : "Today";
 
   return (
     <div className="space-y-6">
@@ -98,9 +95,7 @@ export default function AnalyticsPage() {
           <p className="text-sm text-white/50">Trends, best sellers, staff &amp; customers — {periodLabel.toLowerCase()}.</p>
         </div>
         <div className="no-print flex flex-wrap items-center gap-1.5">
-          {PERIODS.map((p) => (
-            <button key={p.key} onClick={() => setPeriod(p.key)} className={`rounded-lg border border-b-[3px] px-3 py-1.5 text-sm font-semibold transition ${period === p.key ? "border-[#2170ed] bg-[#5a95f2] text-[#ffffff]" : "border-[#e3f3fd] bg-white text-[#0d47a1] hover:bg-[#f4f8fd]"}`}>{p.label}</button>
-          ))}
+          <PeriodPicker period={period} days={days} onChange={(p, d) => { setPeriod(p); setDays(d); }} />
           <button onClick={() => window.print()} className="ml-1 inline-flex items-center gap-1.5 rounded-lg border border-b-[3px] border-[#2170ed] bg-[#5a95f2] px-3 py-1.5 text-sm font-semibold text-[#ffffff]"><DownloadSimple size={16} weight="duotone" /> Download PDF</button>
         </div>
       </div>

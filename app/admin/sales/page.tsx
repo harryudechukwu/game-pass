@@ -18,6 +18,8 @@ type Sale = {
   editedByName: string | null;
   originalQuantity: number | null;
   originalAmountLabel: string | null;
+  voided: boolean;
+  voidedByName: string | null;
 };
 
 export default function AdminSalesPage() {
@@ -43,6 +45,16 @@ export default function AdminSalesPage() {
     finally { setBusy(false); }
   }
 
+  async function voidSale(s: Sale) {
+    if (!confirm(`Void "${s.name}"? It stays on record but is removed from revenue and the member's spend.`)) return;
+    setError("");
+    try {
+      const res = await api<{ warning: string | null }>(`/api/admin/sales/${s.id}/void`, { method: "POST" });
+      if (res.warning) alert(res.warning);
+      await load();
+    } catch (e) { setError(e instanceof ApiClientError ? e.message : "Could not void the sale."); }
+  }
+
   if (loading) return <Loading />;
 
   return (
@@ -57,15 +69,18 @@ export default function AdminSalesPage() {
       <div className="card divide-y divide-white/5">
         {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No sales yet.</p>}
         {rows.map((s) => (
-          <div key={s.id} className="px-4 py-3">
+          <div key={s.id} className={`px-4 py-3 ${s.voided ? "opacity-55" : ""}`}>
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{s.name}{s.quantity > 1 ? ` ×${s.quantity}` : ""}</p>
+                <p className={`truncate font-medium ${s.voided ? "line-through" : ""}`}>{s.name}{s.quantity > 1 ? ` ×${s.quantity}` : ""}</p>
                 <p className="text-xs text-white/45">{s.player ? (s.player.firstName ?? s.player.phone) : "—"} · {timeAgo(s.createdAt)}</p>
               </div>
-              <span className="shrink-0 font-bold text-[#0d47a1]">{s.amountLabel}</span>
-              {editing !== s.id && (
-                <button className="btn-ghost !px-2.5 !py-1.5 text-xs" onClick={() => startEdit(s)}><Pencil size={13} /> Fix qty</button>
+              <span className={`shrink-0 font-bold ${s.voided ? "text-white/40 line-through" : "text-[#0d47a1]"}`}>{s.amountLabel}</span>
+              {!s.voided && editing !== s.id && (
+                <>
+                  <button className="btn-ghost !px-2.5 !py-1.5 text-xs" onClick={() => startEdit(s)}><Pencil size={13} /> Fix qty</button>
+                  <button className="btn-ghost !px-2.5 !py-1.5 text-xs" onClick={() => voidSale(s)}><X size={13} /> Void</button>
+                </>
               )}
             </div>
 
@@ -87,6 +102,11 @@ export default function AdminSalesPage() {
             {s.edited && editing !== s.id && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-400/10 px-2.5 py-1 text-xs text-amber-300">
                 <History size={12} /> Corrected from ×{s.originalQuantity} ({s.originalAmountLabel}){s.editedByName ? ` by ${s.editedByName}` : ""}
+              </p>
+            )}
+            {s.voided && (
+              <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-red-400/10 px-2.5 py-1 text-xs text-red-300">
+                <X size={12} /> Voided{s.voidedByName ? ` by ${s.voidedByName}` : ""} — removed from revenue &amp; spend
               </p>
             )}
           </div>

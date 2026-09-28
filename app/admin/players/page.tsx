@@ -31,7 +31,7 @@ export default function AdminPlayersPage() {
   return (
     <div className="space-y-5">
       <div className="admin-head">
-        <h1 className="text-2xl font-black tracking-tight">Players</h1>
+        <h1 className="text-2xl font-black tracking-tight">Members</h1>
         <p className="text-sm text-white/50">Ranked by amount spent.</p>
       </div>
 
@@ -44,14 +44,14 @@ export default function AdminPlayersPage() {
         <Loading />
       ) : (
         <div className="card divide-y divide-white/5">
-          {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No players found.</p>}
+          {rows.length === 0 && <p className="p-6 text-center text-sm text-white/40">No members found.</p>}
           {rows.map((c) => (
             <Link key={c.id} href={`/admin/players/${c.id}`} className="flex items-center gap-4 px-4 py-3 hover:bg-white/5">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e3f3fd] text-sm font-bold text-[#0d47a1]">
                 {(c.name ?? c.phone).slice(0, 1).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{c.name ?? "Unnamed player"}</p>
+                <p className="truncate font-medium">{c.name ?? "Unnamed member"}</p>
                 <p className="text-xs text-white/45">{c.phone} · {c.gamesPlayed} games</p>
               </div>
               {c.redemptions > 0 && <span className="pill bg-[#ffc800]/15 text-[#ffc800]"><Gift size={11} /> {c.redemptions}</span>}
