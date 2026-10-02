@@ -7,8 +7,8 @@ import { LoginShell, LoginField } from "@/components/LoginShell";
 
 export default function AdminLoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(process.env.NEXT_PUBLIC_DEMO === "1" ? "owner@creamycastle.demo" : "");
+  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_DEMO === "1" ? "demo1234" : "");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -37,6 +37,7 @@ export default function AdminLoginPage() {
       back="/"
       remember={remember}
       onRememberChange={setRemember}
+      footer={process.env.NEXT_PUBLIC_DEMO === "1" ? <p className="gp-login-foot">Demo · admin: owner@creamycastle.demo · manager: manager@creamycastle.demo · password: demo1234</p> : undefined}
     >
       <LoginField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
       <LoginField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />

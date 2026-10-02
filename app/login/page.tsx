@@ -7,7 +7,7 @@ import { LoginShell, LoginField } from "@/components/LoginShell";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(process.env.NEXT_PUBLIC_DEMO === "1" ? "08031234567" : "");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

@@ -7,8 +7,8 @@ import { LoginShell, LoginField } from "@/components/LoginShell";
 
 export default function AttendantLoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(process.env.NEXT_PUBLIC_DEMO === "1" ? "frontdesk" : "");
+  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_DEMO === "1" ? "1234" : "");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

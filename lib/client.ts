@@ -17,6 +17,11 @@ type Options = Omit<RequestInit, "body" | "headers"> & {
 
 export async function api<T = unknown>(path: string, opts: Options = {}): Promise<T> {
   const { body, headers, ...rest } = opts;
+  // demo build: run entirely on in-browser sample data, never touch the network
+  if (process.env.NEXT_PUBLIC_DEMO === "1") {
+    const { demoApi } = await import("@/lib/demo/api");
+    return demoApi<T>(path, (rest.method as string) || "GET", body);
+  }
   const res = await fetch(path, {
     ...rest,
     headers: {
