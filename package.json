@@ -7,7 +7,8 @@
     "dev": "next dev --port 3005",
     "build": "next build",
     "start": "next start --port 3005",
-    "lint": "next lint"
+    "lint": "next lint",
+    "reset-db": "node scripts/reset-db.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "^2.1.10",

@@ -1,6 +1,6 @@
 import { MongoClient, type Db } from "mongodb";
 import { nanoid } from "nanoid";
-import type { Admin, Attendant, Settings } from "@/lib/server/types";
+import type { Admin, Settings } from "@/lib/server/types";
 import { hashPassword } from "@/lib/server/password";
 
 const dbName = process.env.MONGODB_DB ?? "gamepass";
@@ -48,7 +48,10 @@ async function ensureSeed(db: Db): Promise<void> {
 
   // The owner admin login is configured via env (ADMIN_EMAIL / ADMIN_PASSWORD)
   // and always stored hashed. Setting or changing those is how you rotate the
-  // admin password — it never lives in source or in the DB in the clear.
+  // admin password — it never lives in source or in the DB in the clear. This
+  // is the ONLY account seeded automatically; every other admin/manager,
+  // attendant, game, item, reward and member is created by operators in the
+  // console, so a fresh database starts empty and ready for real store data.
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD;
   if (email && password) {
@@ -58,33 +61,20 @@ async function ensureSeed(db: Db): Promise<void> {
       { upsert: true },
     );
     // The env admin is the sole owner login — drop any other admin/staff
-    // accounts (e.g. the old demo seeds) so their credentials stop working.
+    // accounts (e.g. older seeds) so their credentials stop working.
     await admins.deleteMany({ role: { $in: ["admin", "staff"] }, email: { $ne: email } });
   }
 
-  if ((await admins.estimatedDocumentCount()) === 0) await seed(db);
-  // Ensure at least one attendant login exists (also back-fills older databases).
-  if ((await db.collection("attendants").estimatedDocumentCount()) === 0) {
-    await db.collection<Attendant>("attendants").insertOne({
-      _id: id("att"),
-      name: "Front Desk",
-      username: "frontdesk",
-      password: "attend1234",
-      active: true,
-      createdAt: Date.now(),
-    });
-  }
+  // Settings defaults — only fill fields that are missing; never clobber a value
+  // an operator has changed in the console.
+  await db.collection<Settings>("settings").updateOne(
+    { _id: "app" },
+    { $setOnInsert: { headsUpSeconds: 60, attendantOpenMin: 360, attendantCloseMin: 1140, attendantGraceMin: 30, timezone: "Africa/Lagos" } },
+    { upsert: true },
+  );
+
+  // Keep attendant usernames unique. No default attendant is seeded — operators
+  // create their own attendant logins from the admin console.
   await db.collection("attendants").createIndex({ username: 1 }, { unique: true }).catch(() => {});
   g._seeded = true;
-}
-
-async function seed(db: Db): Promise<void> {
-  // Dev fallback only (used when no ADMIN_* env is set). Passwords are hashed;
-  // these demo logins should be overridden via env or removed in production.
-  await db.collection<Admin>("admins").insertMany([
-    { _id: id("adm"), email: "admin@arcade.test", name: "Arcade Admin", password: hashPassword("admin1234"), role: "admin", active: true },
-    { _id: id("adm"), email: "staff@arcade.test", name: "Front Desk", password: hashPassword("staff1234"), role: "staff", active: true },
-  ]);
-
-  await db.collection<Settings>("settings").updateOne({ _id: "app" }, { $set: { headsUpSeconds: 60, attendantOpenMin: 360, attendantCloseMin: 1140, attendantGraceMin: 30, timezone: "Africa/Lagos" } }, { upsert: true });
 }
