@@ -28,7 +28,7 @@ export default function AdminDashboard() {
   const [days, setDays] = useState<string[]>([]);
   const [headsUp, setHeadsUp] = useState(60);
   const [savedMsg, setSavedMsg] = useState("");
-  const [hours, setHours] = useState({ open: 360, close: 1140, grace: 30, tz: "Africa/Lagos" });
+  const [hours, setHours] = useState({ open: 360, close: 1140, grace: 30, storeClose: 1020, tz: "Africa/Lagos" });
   const [hoursMsg, setHoursMsg] = useState("");
 
   useEffect(() => {
@@ -38,8 +38,8 @@ export default function AdminDashboard() {
   }, [period, days]);
 
   useEffect(() => {
-    api<{ attendantOpenMin: number; attendantCloseMin: number; attendantGraceMin: number; timezone: string }>("/api/admin/settings")
-      .then((s) => setHours({ open: s.attendantOpenMin, close: s.attendantCloseMin, grace: s.attendantGraceMin, tz: s.timezone }))
+    api<{ attendantOpenMin: number; attendantCloseMin: number; attendantGraceMin: number; storeCloseMin: number; timezone: string }>("/api/admin/settings")
+      .then((s) => setHours({ open: s.attendantOpenMin, close: s.attendantCloseMin, grace: s.attendantGraceMin, storeClose: s.storeCloseMin, tz: s.timezone }))
       .catch(() => {});
   }, []);
 
@@ -49,7 +49,7 @@ export default function AdminDashboard() {
     setTimeout(() => setSavedMsg(""), 1500);
   }
   async function saveHours() {
-    await api("/api/admin/settings", { method: "PATCH", body: { attendantOpenMin: hours.open, attendantCloseMin: hours.close, attendantGraceMin: hours.grace, timezone: hours.tz.trim() } });
+    await api("/api/admin/settings", { method: "PATCH", body: { attendantOpenMin: hours.open, attendantCloseMin: hours.close, attendantGraceMin: hours.grace, storeCloseMin: hours.storeClose, timezone: hours.tz.trim() } });
     setHoursMsg("Saved");
     setTimeout(() => setHoursMsg(""), 1500);
   }
@@ -130,11 +130,12 @@ export default function AdminDashboard() {
 
           <div className="card p-5">
             <h2 className="mb-1 flex items-center gap-2 font-bold"><Clock size={18} weight="duotone" className="text-[#0d47a1]" /> Attendant hours</h2>
-            <p className="mb-3 text-xs text-white/45">Attendants can only sign in during these hours (venue time). After close they get {hours.grace} min grace to finish logging sales.</p>
-            <div className="grid gap-3 sm:grid-cols-4">
+            <p className="mb-3 text-xs text-white/45">Attendants can only sign in during these hours (venue time). After close they get {hours.grace} min grace to finish logging sales. Unlimited games run until the store-closing time.</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <div><label className="label">Open</label><input type="time" className="input" value={toTime(hours.open)} onChange={(e) => setHours({ ...hours, open: toMin(e.target.value) })} /></div>
               <div><label className="label">Close</label><input type="time" className="input" value={toTime(hours.close)} onChange={(e) => setHours({ ...hours, close: toMin(e.target.value) })} /></div>
               <div><label className="label">Grace (min)</label><input type="number" min={0} max={240} className="input" value={hours.grace} onChange={(e) => setHours({ ...hours, grace: Number(e.target.value) })} /></div>
+              <div><label className="label">Store closes</label><input type="time" className="input" value={toTime(hours.storeClose)} onChange={(e) => setHours({ ...hours, storeClose: toMin(e.target.value) })} /></div>
               <div><label className="label">Timezone</label><input className="input" value={hours.tz} onChange={(e) => setHours({ ...hours, tz: e.target.value })} /></div>
             </div>
             <div className="mt-3 flex items-center gap-3">

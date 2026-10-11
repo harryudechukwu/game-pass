@@ -81,5 +81,6 @@ export type Settings = {
   attendantOpenMin?: number; // minutes since midnight (default 360 = 6:00)
   attendantCloseMin?: number; // default 1140 = 19:00
   attendantGraceMin?: number; // default 30
+  storeCloseMin?: number; // store closing time; unlimited games run until here (default 1020 = 17:00)
   timezone?: string; // IANA tz (default Africa/Lagos)
 };

@@ -9,6 +9,14 @@ export function money(kobo: number, currency = "NGN"): string {
   return `${symbol}${(kobo / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+// A game's duration shown as one of the three modes: 0 (or less) = unlimited,
+// 60 = hourly, anything else = that many minutes.
+export function durationLabel(min: number | null | undefined): string {
+  if (!min || min <= 0) return "Unlimited";
+  if (min === 60) return "Hourly";
+  return `${min} min`;
+}
+
 export function timeAgo(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
   const diff = Date.now() - d.getTime();

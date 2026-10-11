@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ScrollReveal } from "@/components/ScrollReveal";
 
 // Outfit: a clean geometric sans — the app's typeface. Self-hosted (400–700) so
 // there's no build-time fetch.
@@ -33,7 +34,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={outfit.variable} data-theme="light" suppressHydrationWarning>
-      <body>{children}</body>
+      <body>{children}<ScrollReveal /></body>
     </html>
   );
 }

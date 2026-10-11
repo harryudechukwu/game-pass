@@ -6,8 +6,9 @@ import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClo
 import Link from "next/link";
 import { X } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
-import { money } from "@/lib/format";
+import { money, durationLabel } from "@/lib/format";
 import { Spinner, ErrorNote } from "@/components/ui";
+import { TimeKeeper } from "@/components/attendant/TimeKeeper";
 
 type Cat = { id: string; name: string; icon: string; priceKobo: number; priceLabel: string; category?: string; location?: string; durationMinutes?: number };
 type Lookup = { phone: string; found: boolean; player: { name: string | null; firstName: string | null; spentLabel: string; gamesPlayed: number } | null };
@@ -49,6 +50,8 @@ export default function AttendantPage() {
   const [redeemError, setRedeemError] = useState("");
   const [redeemResult, setRedeemResult] = useState<RedeemResult | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [view, setView] = useState<"order" | "time">("order");
+  const [activeTimers, setActiveTimers] = useState(0);
   const router = useRouter();
 
   const loadStatic = useCallback(async () => {
@@ -135,6 +138,8 @@ export default function AttendantPage() {
   }
   function closeRedeem() { setRedeemMode(false); setRedeemCode(""); setRedeemResult(null); setRedeemError(""); }
 
+  const showTime = view === "time" && !redeemMode && !result && !review;
+
   return (
     <IconContext.Provider value={{ weight: "duotone" }}>
     <main className="min-h-screen">
@@ -149,7 +154,6 @@ export default function AttendantPage() {
           </div>
           {/* desktop actions */}
           <div className="hidden items-center gap-3 md:flex">
-            <button onClick={() => setRedeemMode(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-b-[3px] border-[#dfe3e9] bg-white px-3 py-1.5 text-sm font-semibold text-[#0d47a1]"><Gift size={17} /> Redeem reward</button>
             {me && <span className="pill">{me.name}</span>}
             <button onClick={logout} className="inline-flex items-center gap-1.5 text-sm text-white/40 hover:text-white"><LogOut size={18} /> Sign out</button>
           </div>
@@ -166,14 +170,21 @@ export default function AttendantPage() {
             <button onClick={() => setMenuOpen(false)} aria-label="Close" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#e3f3fd] text-[#0d47a1]"><X size={22} /></button>
           </div>
           <div className="mt-8 space-y-3">
-            <button onClick={() => { setMenuOpen(false); setRedeemMode(true); }} className="flex w-full items-center gap-3 rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white px-4 py-4 text-left text-lg font-semibold text-[#0d47a1]"><Gift size={22} weight="duotone" /> Redeem reward</button>
             <button onClick={() => { setMenuOpen(false); logout(); }} className="flex w-full items-center gap-3 rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white px-4 py-4 text-left text-lg font-semibold text-[#0d47a1]"><LogOut size={22} weight="duotone" /> Sign out</button>
           </div>
         </div>
       )}
 
       <div className="mx-auto max-w-6xl px-6 py-8">
-        {result ? (
+        {!redeemMode && !result && !review && (
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <button onClick={() => setView("order")} className={`inline-flex items-center gap-2 rounded-lg border border-b-[3px] px-4 py-2.5 ${view === "order" ? "border-[#2170ed] bg-[#5a95f2] font-semibold text-[#ffffff]" : "border-[#dfe3e9] bg-white text-white/60 hover:bg-[#f5f8fd]"}`}><ShoppingCart size={18} /> New order</button>
+            <button onClick={() => setView("time")} className={`inline-flex items-center gap-2 rounded-lg border border-b-[3px] px-4 py-2.5 ${view === "time" ? "border-[#2170ed] bg-[#5a95f2] font-semibold text-[#ffffff]" : "border-[#dfe3e9] bg-white text-white/60 hover:bg-[#f5f8fd]"}`}><Timer size={18} /> Time keeping{activeTimers > 0 ? ` · ${activeTimers}` : ""}</button>
+            <button onClick={() => setRedeemMode(true)} className="inline-flex items-center gap-2 rounded-lg border border-b-[3px] border-[#dfe3e9] bg-white px-4 py-2.5 font-semibold text-[#0d47a1] hover:bg-[#f5f8fd] sm:ml-auto"><Gift size={18} /> Redeem reward</button>
+          </div>
+        )}
+        <TimeKeeper visible={showTime} onActiveCount={setActiveTimers} />
+        {showTime ? null : result ? (
           <div className="card mx-auto max-w-lg border-2 border-emerald-400/30 p-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300"><Check size={34} /></div>
             <h1 className="text-2xl font-black">Order logged</h1>
@@ -208,7 +219,7 @@ export default function AttendantPage() {
               <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
                 {cart.map((l) => (
                   <div key={l.key} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate text-white/80">{l.ref.name}{l.kind === "game" ? ` · ${l.qty}h` : l.qty > 1 ? ` ×${l.qty}` : ""}</span>
+                    <span className="truncate text-white/80">{l.ref.name}{l.kind === "game" ? ` · ${durationLabel(l.ref.durationMinutes)}${l.qty > 1 ? ` ×${l.qty}` : ""}` : l.qty > 1 ? ` ×${l.qty}` : ""}</span>
                     <span className="shrink-0 text-white/70">{money(l.ref.priceKobo * l.qty, "NGN")}</span>
                   </div>
                 ))}
@@ -217,7 +228,7 @@ export default function AttendantPage() {
                 <span>Total</span><span className="text-xl text-[#0d47a1]">{money(total, "NGN")}</span>
               </div>
             </div>
-            {cart.some((l) => l.kind === "game") && (
+            {cart.some((l) => l.kind === "game" && (l.ref.durationMinutes ?? 0) > 0) && (
               <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300"><Timer size={13} className="mr-1 inline" /> Game timers start after a {headsUp}s heads-up on the member&apos;s phone.</p>
             )}
             <div className="mt-6 flex gap-3">
@@ -291,7 +302,7 @@ export default function AttendantPage() {
                     <input className="input pl-9" placeholder="Search items…" value={itemQuery} onChange={(e) => setItemQuery(e.target.value)} />
                   </div>
                 )}
-                <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div key={mainTab} className={`cc-rise mt-5 grid grid-cols-2 gap-3 ${mainTab === "items" ? "sm:grid-cols-3" : ""}`}>
                   {list.map((c) => {
                     const kind = mainTab === "items" ? "item" : "game";
                     const inCart = cart.find((l) => l.kind === kind && l.ref.id === c.id);
@@ -299,7 +310,7 @@ export default function AttendantPage() {
                       <button key={c.id} onClick={() => addToCart(kind, c)} className={`relative flex min-h-[84px] flex-col justify-start rounded-2xl border border-b-[3px] border-[#dfe3e9] p-4 text-left transition ${inCart ? "bg-[#5a95f2]/10" : "hover:bg-[#f5f8fd]"}`}>
                         {inCart && <span className="absolute right-3 top-3 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#5a95f2] px-1.5 text-sm font-bold text-white">{inCart.qty}</span>}
                         <p className="line-clamp-2 pr-6 text-base font-bold leading-snug sm:text-lg">{c.name}</p>
-                        <p className="mt-1 text-sm font-semibold text-white/45 sm:text-base">{c.priceLabel}{mainTab !== "items" ? "/hr" : ""}</p>
+                        <p className="mt-1 text-sm font-semibold text-white/45 sm:text-base">{c.priceLabel}{mainTab !== "items" && c.durationMinutes != null ? ` · ${durationLabel(c.durationMinutes)}` : ""}</p>
                       </button>
                     );
                   })}
@@ -321,7 +332,7 @@ export default function AttendantPage() {
                       <div key={l.key} className="flex items-center gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-base font-semibold">{l.ref.name}</p>
-                          <p className="text-sm text-white/45">{money(l.ref.priceKobo * l.qty, "NGN")}{l.kind === "game" ? ` · ${l.qty}h` : ""}</p>
+                          <p className="text-sm text-white/45">{money(l.ref.priceKobo * l.qty, "NGN")}{l.kind === "game" && l.ref.durationMinutes != null ? ` · ${durationLabel(l.ref.durationMinutes)}` : ""}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button className="rounded-lg border border-[#bbdefb] bg-white p-2 text-[#0d47a1] hover:bg-[#0d47a1]/5" onClick={() => setQty(l.key, l.qty - 1)}><Minus size={18} /></button>
@@ -335,7 +346,7 @@ export default function AttendantPage() {
                       <span className="text-base font-semibold">Total</span>
                       <span className="text-2xl font-black text-[#0d47a1]">{money(total, "NGN")}</span>
                     </div>
-                    {cart.some((l) => l.kind === "game") && (
+                    {cart.some((l) => l.kind === "game" && (l.ref.durationMinutes ?? 0) > 0) && (
                       <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Game timers start after a {headsUp}s heads-up on the member&apos;s phone.</p>
                     )}
                     <button className="btn-primary w-full py-4" disabled={phone.replace(/\s+/g, "").length < 6} onClick={() => { setError(""); setReview(true); }}>

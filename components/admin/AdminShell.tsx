@@ -112,7 +112,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             ))}
           </div>
 
-          <main className="flex-1 p-5 md:p-8">{children}</main>
+          <main className="flex-1 p-5 md:p-8"><div key={pathname} className="cc-fade">{children}</div></main>
         </div>
       </div>
       </AdminCtx.Provider>

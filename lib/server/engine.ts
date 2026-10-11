@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { money } from "@/lib/format";
 import { cols } from "@/lib/server/db";
 import { verifyPassword } from "@/lib/server/password";
-import { venueNow, venueDate, venueDayRange, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
+import { venueNow, venueDate, venueDayRange, venueTimeEpoch, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
 import type { SessionCtx } from "@/lib/server/session";
 import type { Attendant, Game, Item, Player, Purchase, Reward } from "@/lib/server/types";
 
@@ -302,6 +302,22 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     games.sort((a, z) => Number(z.featured) - Number(a.featured) || a.name.localeCompare(z.name));
     return { games: games.map(sGame), items: items.map(sItem), headsUpSeconds: settings?.headsUpSeconds ?? 60 };
   }
+
+  // live game timers for the time-keeping tab (every player's running / just-ended session)
+  if (r[0] === "attendant" && r[1] === "sessions" && method === "GET") {
+    await requireAttendant(ctx, c);
+    const now = Date.now();
+    const since = now - 30 * 60 * 1000;
+    const rows = await c.purchases.find({ kind: "game", voidedAt: null, mainEndsAt: { $gt: since } }).sort({ mainEndsAt: 1 }).toArray();
+    const ids = Array.from(new Set(rows.map((p) => p.playerId)));
+    const players = ids.length ? await c.players.find({ _id: { $in: ids } }).toArray() : [];
+    return {
+      sessions: rows.map((p) => {
+        const pl = players.find((x) => x._id === p.playerId);
+        return { id: p._id, game: p.name, quantity: p.quantity, name: pl?.name ?? null, phone: pl?.phone ?? "", headsUpEndsAt: p.headsUpEndsAt, mainEndsAt: p.mainEndsAt };
+      }),
+    };
+  }
   if (r[0] === "attendant" && r[1] === "lookup" && method === "GET") {
     await requireAttendant(ctx, c);
     const phone = normPhone(query.get("phone"));
@@ -334,8 +350,16 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
       if (!game) throw new HttpError(404, "game_not_found", "Pick a game.");
       if (game.status !== "active") throw new HttpError(409, "game_unavailable", "That game is not active.");
       const hours = Math.max(1, Math.floor(Number(b.hours ?? 1)) || 1);
-      const headsUpEndsAt = now + headsUpSeconds * 1000;
-      const mainEndsAt = headsUpEndsAt + hours * game.durationMinutes * 60 * 1000;
+      // Timed games count down the purchased duration after a heads-up; unlimited
+      // games run from now until the store's closing time on the day of purchase.
+      let headsUpEndsAt: number | null = null;
+      let mainEndsAt: number | null = null;
+      if (game.durationMinutes > 0) {
+        headsUpEndsAt = now + headsUpSeconds * 1000;
+        mainEndsAt = headsUpEndsAt + hours * game.durationMinutes * 60 * 1000;
+      } else {
+        mainEndsAt = venueTimeEpoch(settings?.timezone || DEFAULT_TZ, settings?.storeCloseMin ?? 1020, now);
+      }
       purchase = { _id: newId("pur"), playerId: player._id, kind: "game", refId: game._id, name: game.name, icon: game.icon, amountKobo: hours * game.priceKobo, quantity: hours, attendantId: att._id, createdAt: now, headsUpEndsAt, mainEndsAt, location: game.location };
     } else {
       const item = await c.items.findOne({ _id: String(b.refId) });
@@ -381,8 +405,14 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
         if (!game) throw new HttpError(404, "game_not_found", "One of the games wasn't found.");
         if (game.status !== "active") throw new HttpError(409, "game_unavailable", `${game.name} is not active.`);
         const hours = Math.max(1, Math.floor(Number(line.hours ?? 1)) || 1);
-        const headsUpEndsAt = now + headsUpSeconds * 1000;
-        const mainEndsAt = headsUpEndsAt + hours * game.durationMinutes * 60 * 1000;
+        let headsUpEndsAt: number | null = null;
+        let mainEndsAt: number | null = null;
+        if (game.durationMinutes > 0) {
+          headsUpEndsAt = now + headsUpSeconds * 1000;
+          mainEndsAt = headsUpEndsAt + hours * game.durationMinutes * 60 * 1000;
+        } else {
+          mainEndsAt = venueTimeEpoch(settings?.timezone || DEFAULT_TZ, settings?.storeCloseMin ?? 1020, now);
+        }
         toInsert.push({ _id: newId("pur"), playerId: player._id, kind: "game", refId: game._id, name: game.name, icon: game.icon, amountKobo: hours * game.priceKobo, quantity: hours, attendantId: att._id, createdAt: now, headsUpEndsAt, mainEndsAt, location: game.location });
       } else {
         const item = await c.items.findOne({ _id: String(line.refId) });
@@ -398,7 +428,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     const redeemed = await redeemedIds(c, player._id);
     const unlocked = rewards.filter((x) => spent >= x.spendRequiredKobo && !redeemed.has(x._id)).map((x) => ({ id: x._id, name: x.name }));
     const totalKobo = toInsert.reduce((s, p) => s + p.amountKobo, 0);
-    return { purchases: toInsert.map(sPurchase), totalKobo, totalLabel: ngn(totalKobo), player: { ...sPlayer(player), spentKobo: spent, spentLabel: ngn(spent) }, isNewPlayer, headsUpSeconds, hasGame: toInsert.some((p) => p.kind === "game"), unlockedRewards: unlocked };
+    return { purchases: toInsert.map(sPurchase), totalKobo, totalLabel: ngn(totalKobo), player: { ...sPlayer(player), spentKobo: spent, spentLabel: ngn(spent) }, isNewPlayer, headsUpSeconds, hasGame: toInsert.some((p) => p.kind === "game" && p.mainEndsAt != null), unlockedRewards: unlocked };
   }
 
   // reward redemption at the desk — attendant enters the code the guest shows
@@ -473,7 +503,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   if (r[1] === "settings" && method === "GET") {
     await requireNonManager(ctx, c);
     const s = await c.settings.findOne({ _id: "app" });
-    return { headsUpSeconds: s?.headsUpSeconds ?? 60, attendantOpenMin: s?.attendantOpenMin ?? 360, attendantCloseMin: s?.attendantCloseMin ?? 1140, attendantGraceMin: s?.attendantGraceMin ?? 30, timezone: s?.timezone || DEFAULT_TZ };
+    return { headsUpSeconds: s?.headsUpSeconds ?? 60, attendantOpenMin: s?.attendantOpenMin ?? 360, attendantCloseMin: s?.attendantCloseMin ?? 1140, attendantGraceMin: s?.attendantGraceMin ?? 30, storeCloseMin: s?.storeCloseMin ?? 1020, timezone: s?.timezone || DEFAULT_TZ };
   }
   if (r[1] === "settings" && method === "PATCH") {
     await requireNonManager(ctx, c);
@@ -482,10 +512,11 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     if ("attendantOpenMin" in b) set.attendantOpenMin = Math.max(0, Math.min(1439, Math.floor(Number(b.attendantOpenMin))));
     if ("attendantCloseMin" in b) set.attendantCloseMin = Math.max(0, Math.min(1439, Math.floor(Number(b.attendantCloseMin))));
     if ("attendantGraceMin" in b) set.attendantGraceMin = Math.max(0, Math.min(240, Math.floor(Number(b.attendantGraceMin))));
+    if ("storeCloseMin" in b) set.storeCloseMin = Math.max(0, Math.min(1439, Math.floor(Number(b.storeCloseMin))));
     if ("timezone" in b && String(b.timezone).trim()) set.timezone = String(b.timezone).trim();
     if (Object.keys(set).length) await c.settings.updateOne({ _id: "app" }, { $set: set }, { upsert: true });
     const s = await c.settings.findOne({ _id: "app" });
-    return { headsUpSeconds: s?.headsUpSeconds ?? 60, attendantOpenMin: s?.attendantOpenMin ?? 360, attendantCloseMin: s?.attendantCloseMin ?? 1140, attendantGraceMin: s?.attendantGraceMin ?? 30, timezone: s?.timezone || DEFAULT_TZ };
+    return { headsUpSeconds: s?.headsUpSeconds ?? 60, attendantOpenMin: s?.attendantOpenMin ?? 360, attendantCloseMin: s?.attendantCloseMin ?? 1140, attendantGraceMin: s?.attendantGraceMin ?? 30, storeCloseMin: s?.storeCloseMin ?? 1020, timezone: s?.timezone || DEFAULT_TZ };
   }
 
   // full analysis for admin/staff — figures scoped to ?period=today|week|month|all
@@ -904,7 +935,7 @@ async function buildGame(c: Cols, b: Body): Promise<Game> {
   return {
     _id: newId("game"), name, slug,
     description: String(b.description ?? ""), category: b.category === "kids" ? "kids" : "teen", icon: String(b.icon ?? "gamepad"), location: String(b.location ?? ""),
-    priceKobo: Math.max(0, Math.round(Number(b.priceKobo ?? 100000))), durationMinutes: Math.max(1, Math.round(Number(b.durationMinutes ?? 60))),
+    priceKobo: Math.max(0, Math.round(Number(b.priceKobo ?? 100000))), durationMinutes: Math.max(0, Math.round(Number(b.durationMinutes ?? 60))),
     minAge: b.minAge == null || b.minAge === "" ? null : Number(b.minAge), minHeightCm: b.minHeightCm == null || b.minHeightCm === "" ? null : Number(b.minHeightCm),
     instructions: (b.instructions as string) || null, rules: (b.rules as string) || null, safety: (b.safety as string) || null,
     status: String(b.status ?? "active"), featured: Boolean(b.featured), createdAt: Date.now(),

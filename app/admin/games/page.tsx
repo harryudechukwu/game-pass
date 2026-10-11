@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash as Trash2, X, Star } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote, StatusPill } from "@/components/ui";
+import { durationLabel } from "@/lib/format";
 
 type Game = {
   id: string; name: string; description: string; category: "kids" | "teen"; icon: string;
@@ -39,7 +40,7 @@ export default function AdminGamesPage() {
           <h1 className="text-2xl font-black tracking-tight">Games</h1>
           <p className="text-sm text-white/50">{games.length} games · Kids &amp; Teenager categories</p>
         </div>
-        <button className="btn-primary w-full md:w-auto" onClick={() => setEditing({ status: "active", category: "kids", icon: "gamepad", priceKobo: 100000, durationMinutes: 60 })}>
+        <button className="btn-primary w-full md:w-auto" onClick={() => setEditing({ priceKobo: 100000, durationMinutes: 60 })}>
           <Plus size={18} /> New game
         </button>
       </div>
@@ -55,11 +56,10 @@ export default function AdminGamesPage() {
                   <h3 className="truncate font-bold">{g.name}</h3>
                   {g.featured && <Star size={14} className="shrink-0 text-[#0d47a1]" />}
                 </div>
-                <p className="text-xs text-white/45">{g.location}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <StatusPill status={g.status} />
-                  <span className="pill capitalize">{g.category}</span>
-                  <span className="pill">{g.priceLabel}/hr</span>
+                  <span className="pill">{g.priceLabel}</span>
+                  <span className="pill">{durationLabel(g.durationMinutes)}</span>
                 </div>
               </div>
             </div>
@@ -81,21 +81,12 @@ export default function AdminGamesPage() {
 
 function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClose: () => void; onSaved: () => void }) {
   const isEdit = Boolean(initial.id);
+  const initDur = initial.durationMinutes ?? 60;
   const [form, setForm] = useState({
     name: initial.name ?? "",
-    description: initial.description ?? "",
-    category: initial.category ?? "kids",
-    icon: initial.icon ?? "gamepad",
-    location: initial.location ?? "",
     priceNaira: initial.priceKobo != null ? Math.round(initial.priceKobo / 100) : 1000,
-    durationMinutes: initial.durationMinutes ?? 60,
-    minAge: initial.minAge ?? "",
-    minHeightCm: initial.minHeightCm ?? "",
-    instructions: initial.instructions ?? "",
-    rules: initial.rules ?? "",
-    safety: initial.safety ?? "",
-    status: initial.status ?? "active",
-    featured: initial.featured ?? false,
+    durationMode: (initDur <= 0 ? "unlimited" : initDur === 60 ? "hourly" : "minutes") as "minutes" | "hourly" | "unlimited",
+    minutes: initDur > 0 && initDur !== 60 ? initDur : 30,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -103,12 +94,11 @@ function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClo
 
   async function save() {
     setBusy(true); setError("");
+    const durationMinutes = form.durationMode === "unlimited" ? 0 : form.durationMode === "hourly" ? 60 : Math.max(1, Math.round(Number(form.minutes)) || 1);
     const payload = {
-      name: form.name, description: form.description, category: form.category, icon: form.icon, location: form.location,
-      priceKobo: Number(form.priceNaira) * 100, durationMinutes: Number(form.durationMinutes),
-      minAge: form.minAge === "" ? null : Number(form.minAge), minHeightCm: form.minHeightCm === "" ? null : Number(form.minHeightCm),
-      instructions: form.instructions || null, rules: form.rules || null, safety: form.safety || null,
-      status: form.status, featured: form.featured,
+      name: form.name,
+      priceKobo: Number(form.priceNaira) * 100,
+      durationMinutes,
     };
     try {
       if (isEdit) await api(`/api/admin/games/${initial.id}`, { method: "PATCH", body: payload });
@@ -119,7 +109,7 @@ function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClo
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/60 p-4" onClick={onClose}>
-      <div className="my-4 w-full max-w-2xl rounded-3xl border border-white/10 bg-[#141a2e] p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="my-4 w-full max-w-md rounded-3xl border border-white/10 bg-[#141a2e] p-6" onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-xl font-bold">{isEdit ? "Edit game" : "New game"}</h2>
           <button onClick={onClose} className="text-white/50 hover:text-white"><X size={20} /></button>
@@ -127,33 +117,23 @@ function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClo
         {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field className="sm:col-span-2" label="Name"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
-          <Field className="sm:col-span-2" label="Description"><textarea className="input min-h-16" value={form.description} onChange={(e) => set("description", e.target.value)} /></Field>
-          <Field label="Category">
-            <select className="input" value={form.category} onChange={(e) => set("category", e.target.value as "kids" | "teen")}>
-              <option value="kids">Kids Games</option>
-              <option value="teen">Teenager Games</option>
+          <Field className="sm:col-span-2" label="Name"><input className="input" value={form.name} onChange={(e) => set("name", e.target.value)} autoFocus /></Field>
+          <Field label="Price (₦)"><input type="number" className="input" value={form.priceNaira} onChange={(e) => set("priceNaira", e.target.value as never)} /></Field>
+          <Field label="Duration">
+            <select className="input" value={form.durationMode} onChange={(e) => set("durationMode", e.target.value as never)}>
+              <option value="minutes">Minutes</option>
+              <option value="hourly">Hourly</option>
+              <option value="unlimited">Unlimited</option>
             </select>
           </Field>
-          <Field label="Location"><input className="input" value={form.location} onChange={(e) => set("location", e.target.value)} /></Field>
-          <Field label="Price (₦ per hour)"><input type="number" className="input" value={form.priceNaira} onChange={(e) => set("priceNaira", e.target.value as never)} /></Field>
-          <Field label="Duration per hour (minutes)"><input type="number" className="input" value={form.durationMinutes} onChange={(e) => set("durationMinutes", e.target.value as never)} /></Field>
-          <Field label="Min age (blank = none)"><input type="number" className="input" value={form.minAge} onChange={(e) => set("minAge", e.target.value as never)} /></Field>
-          <Field label="Min height cm (blank = none)"><input type="number" className="input" value={form.minHeightCm} onChange={(e) => set("minHeightCm", e.target.value as never)} /></Field>
-          <Field className="sm:col-span-2" label="Instructions"><textarea className="input" value={form.instructions} onChange={(e) => set("instructions", e.target.value)} /></Field>
-          <Field label="Rules"><textarea className="input" value={form.rules} onChange={(e) => set("rules", e.target.value)} /></Field>
-          <Field label="Safety"><textarea className="input" value={form.safety} onChange={(e) => set("safety", e.target.value)} /></Field>
-          <Field label="Status">
-            <select className="input" value={form.status} onChange={(e) => set("status", e.target.value)}>{STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}</select>
-          </Field>
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#ffc800]" checked={form.featured} onChange={(e) => set("featured", e.target.checked)} /> Featured</label>
-          </div>
+          {form.durationMode === "minutes" && (
+            <Field label="Minutes"><input type="number" className="input" min={1} value={form.minutes} onChange={(e) => set("minutes", e.target.value as never)} /></Field>
+          )}
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={busy || !form.name || !form.location}>{busy ? "Saving…" : isEdit ? "Save changes" : "Create game"}</button>
+          <button className="btn-primary" onClick={save} disabled={busy || !form.name}>{busy ? "Saving…" : isEdit ? "Save changes" : "Create game"}</button>
         </div>
       </div>
     </div>

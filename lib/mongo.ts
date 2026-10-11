@@ -69,7 +69,7 @@ async function ensureSeed(db: Db): Promise<void> {
   // an operator has changed in the console.
   await db.collection<Settings>("settings").updateOne(
     { _id: "app" },
-    { $setOnInsert: { headsUpSeconds: 60, attendantOpenMin: 360, attendantCloseMin: 1140, attendantGraceMin: 30, timezone: "Africa/Lagos" } },
+    { $setOnInsert: { headsUpSeconds: 60, attendantOpenMin: 360, attendantCloseMin: 1140, attendantGraceMin: 30, storeCloseMin: 1020, timezone: "Africa/Lagos" } },
     { upsert: true },
   );
 
