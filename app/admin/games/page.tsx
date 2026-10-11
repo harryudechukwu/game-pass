@@ -82,11 +82,13 @@ export default function AdminGamesPage() {
 function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClose: () => void; onSaved: () => void }) {
   const isEdit = Boolean(initial.id);
   const initDur = initial.durationMinutes ?? 60;
+  const initMode = initDur <= 0 ? "unlimited" : initDur % 60 === 0 ? "hours" : "minutes";
   const [form, setForm] = useState({
     name: initial.name ?? "",
     priceNaira: initial.priceKobo != null ? Math.round(initial.priceKobo / 100) : 1000,
-    durationMode: (initDur <= 0 ? "unlimited" : initDur === 60 ? "hourly" : "minutes") as "minutes" | "hourly" | "unlimited",
-    minutes: initDur > 0 && initDur !== 60 ? initDur : 30,
+    durationMode: initMode as "minutes" | "hours" | "unlimited",
+    minutes: initMode === "minutes" ? initDur : 30,
+    hours: initMode === "hours" ? initDur / 60 : 1,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -94,7 +96,7 @@ function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClo
 
   async function save() {
     setBusy(true); setError("");
-    const durationMinutes = form.durationMode === "unlimited" ? 0 : form.durationMode === "hourly" ? 60 : Math.max(1, Math.round(Number(form.minutes)) || 1);
+    const durationMinutes = form.durationMode === "unlimited" ? 0 : form.durationMode === "hours" ? Math.max(1, Math.round(Number(form.hours)) || 1) * 60 : Math.max(1, Math.round(Number(form.minutes)) || 1);
     const payload = {
       name: form.name,
       priceKobo: Number(form.priceNaira) * 100,
@@ -122,12 +124,15 @@ function GameForm({ initial, onClose, onSaved }: { initial: Partial<Game>; onClo
           <Field label="Duration">
             <select className="input" value={form.durationMode} onChange={(e) => set("durationMode", e.target.value as never)}>
               <option value="minutes">Minutes</option>
-              <option value="hourly">Hourly</option>
+              <option value="hours">Hours</option>
               <option value="unlimited">Unlimited</option>
             </select>
           </Field>
           {form.durationMode === "minutes" && (
             <Field label="Minutes"><input type="number" className="input" min={1} value={form.minutes} onChange={(e) => set("minutes", e.target.value as never)} /></Field>
+          )}
+          {form.durationMode === "hours" && (
+            <Field label="Hours"><input type="number" className="input" min={1} value={form.hours} onChange={(e) => set("hours", e.target.value as never)} /></Field>
           )}
         </div>
 

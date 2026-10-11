@@ -9,11 +9,11 @@ export function money(kobo: number, currency = "NGN"): string {
   return `${symbol}${(kobo / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-// A game's duration shown as one of the three modes: 0 (or less) = unlimited,
-// 60 = hourly, anything else = that many minutes.
+// A game's duration label: 0 (or less) = unlimited, whole hours shown as hours,
+// anything else as minutes.
 export function durationLabel(min: number | null | undefined): string {
   if (!min || min <= 0) return "Unlimited";
-  if (min === 60) return "Hourly";
+  if (min % 60 === 0) { const h = min / 60; return `${h} hr${h > 1 ? "s" : ""}`; }
   return `${min} min`;
 }
 
