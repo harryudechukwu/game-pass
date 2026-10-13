@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, List, ClockCounterClockwise, IconContext } from "@phosphor-icons/react";
 import Link from "next/link";
@@ -52,6 +52,7 @@ export default function AttendantPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [view, setView] = useState<"order" | "time">("order");
   const [activeTimers, setActiveTimers] = useState(0);
+  const draftRef = useRef(false);
   const router = useRouter();
 
   const loadStatic = useCallback(async () => {
@@ -66,6 +67,27 @@ export default function AttendantPage() {
       .then((r) => { setMe(r.attendant); return loadStatic(); })
       .catch((e) => { if (e instanceof ApiClientError && e.status === 401) router.replace("/attendant/login"); });
   }, [loadStatic, router]);
+
+  // Save the in-progress sale (phone + cart) so an interrupted attendant can pick
+  // up where they left off after a refresh, a lock screen, or navigating away.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("cc_att_draft");
+      if (raw) {
+        const d = JSON.parse(raw) as { phone?: string; cart?: CartLine[] };
+        if (typeof d.phone === "string") setPhone(d.phone);
+        if (Array.isArray(d.cart)) setCart(d.cart);
+      }
+    } catch { /* ignore an unreadable draft */ }
+    draftRef.current = true;
+  }, []);
+  useEffect(() => {
+    if (!draftRef.current) return; // don't write until the initial restore has run
+    try {
+      if (!phone && cart.length === 0) localStorage.removeItem("cc_att_draft");
+      else localStorage.setItem("cc_att_draft", JSON.stringify({ phone, cart }));
+    } catch { /* storage unavailable */ }
+  }, [phone, cart]);
 
   function logout() {
     void api("/api/attendant/logout", { method: "POST" }).catch(() => {});

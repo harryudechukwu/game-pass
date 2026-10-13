@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash as Trash2, X, Power } from "@phosphor-icons/react";
+import { Plus, Pencil, Trash as Trash2, X, Power, Warning } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote } from "@/components/ui";
 
@@ -13,6 +13,9 @@ type Item = {
   priceKobo: number;
   priceLabel: string;
   active: boolean;
+  stock: number | null;
+  lowStockAt: number;
+  low: boolean;
 };
 
 export default function AdminItemsPage() {
@@ -31,6 +34,8 @@ export default function AdminItemsPage() {
     catch (e) { setError(e instanceof ApiClientError ? e.message : "Delete failed."); }
   }
 
+  const lowCount = items.filter((i) => i.low).length;
+
   if (loading) return <Loading />;
 
   return (
@@ -44,6 +49,11 @@ export default function AdminItemsPage() {
       </div>
 
       {error && <ErrorNote message={error} />}
+      {lowCount > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-b-[3px] border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+          <Warning size={18} weight="duotone" /> {lowCount} item{lowCount > 1 ? "s" : ""} running low — time to restock.
+        </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {items.map((i) => (
@@ -55,6 +65,11 @@ export default function AdminItemsPage() {
                   <span className="pill shrink-0">{i.priceLabel}</span>
                 </div>
                 <p className="text-xs text-white/45">{i.description}</p>
+                {i.stock != null && (
+                  <p className={`mt-1 text-xs font-bold ${i.stock <= 0 ? "text-red-600" : i.low ? "text-amber-600" : "text-white/55"}`}>
+                    {i.stock <= 0 ? "Out of stock" : i.low ? `Low stock · ${i.stock} left` : `${i.stock} in stock`}
+                  </p>
+                )}
                 <div className="mt-3 flex gap-1">
                   <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => toggle(i)}><Power size={13} /> {i.active ? "Disable" : "Enable"}</button>
                   <button className="btn-ghost !px-2 !py-1 text-xs" onClick={() => setEditing(i)}><Pencil size={13} /> Edit</button>
@@ -78,6 +93,8 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
     description: initial.description ?? "",
     icon: initial.icon ?? "coins",
     priceNaira: initial.priceKobo != null ? Math.round(initial.priceKobo / 100) : 500,
+    stock: initial.stock != null ? String(initial.stock) : "",
+    lowStockAt: initial.lowStockAt ?? 5,
     active: initial.active ?? true,
   });
   const [busy, setBusy] = useState(false);
@@ -85,7 +102,7 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
 
   async function save() {
     setBusy(true); setError("");
-    const payload = { name: form.name, description: form.description || null, icon: form.icon, priceKobo: Number(form.priceNaira) * 100, active: form.active };
+    const payload = { name: form.name, description: form.description || null, icon: form.icon, priceKobo: Number(form.priceNaira) * 100, stock: form.stock === "" ? null : Number(form.stock), lowStockAt: Number(form.lowStockAt), active: form.active };
     try {
       if (isEdit) await api(`/api/admin/items/${initial.id}`, { method: "PATCH", body: payload });
       else await api("/api/admin/items", { method: "POST", body: payload });
@@ -105,6 +122,10 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
           <div><label className="label">Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Bottled Water" /></div>
           <div><label className="label">Description</label><input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="label">Price (₦)</label><input type="number" className="input" value={form.priceNaira} onChange={(e) => setForm({ ...form, priceNaira: e.target.value as never })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Stock</label><input type="number" min={0} className="input" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} placeholder="blank = not tracked" /></div>
+            <div><label className="label">Alert at</label><input type="number" min={0} className="input" value={form.lowStockAt} onChange={(e) => setForm({ ...form, lowStockAt: e.target.value as never })} /></div>
+          </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#0d47a1]" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
         </div>
         <div className="mt-6 flex justify-end gap-2">

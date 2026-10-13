@@ -31,6 +31,8 @@ export type Item = {
   icon: string;
   priceKobo: number;
   active: boolean;
+  stock?: number | null; // null/undefined = not stock-tracked
+  lowStockAt?: number; // low-stock alert threshold (default 5)
   createdAt: number;
 };
 

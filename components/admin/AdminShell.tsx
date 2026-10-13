@@ -33,6 +33,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lowStock, setLowStock] = useState(0);
 
   useEffect(() => {
     api<{ admin: Admin }>("/api/admin/me")
@@ -42,6 +43,14 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       })
       .finally(() => setLoading(false));
   }, [router]);
+
+  // Low-stock notification count, refreshed periodically so it shows from any page.
+  useEffect(() => {
+    const loadAlerts = () => api<{ lowStock: number }>("/api/admin/alerts").then((r) => setLowStock(r.lowStock)).catch(() => {});
+    loadAlerts();
+    const t = setInterval(loadAlerts, 60000);
+    return () => clearInterval(t);
+  }, []);
 
   // managers can't reach admin-only pages — bounce them to the catalogue
   useEffect(() => {
@@ -73,7 +82,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
           <nav className="flex-1 space-y-1">
             {visibleNav.map((n) => (
-              <NavLink key={n.href} {...n} active={isActive(pathname, n.href)} />
+              <NavLink key={n.href} {...n} active={isActive(pathname, n.href)} badge={n.href === "/admin/items" ? lowStock : 0} />
             ))}
           </nav>
           <div className="border-t border-white/10 pt-3">
@@ -107,7 +116,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   isActive(pathname, n.href) ? "bg-white/10 text-white" : "text-white/50",
                 )}
               >
-                {n.label}
+                {n.label}{n.href === "/admin/items" && lowStock > 0 ? ` (${lowStock})` : ""}
               </Link>
             ))}
           </div>
@@ -129,11 +138,13 @@ function NavLink({
   label,
   icon: NavIcon,
   active,
+  badge = 0,
 }: {
   href: string;
   label: string;
   icon: Icon;
   active: boolean;
+  badge?: number;
 }) {
   return (
     <Link
@@ -143,7 +154,8 @@ function NavLink({
         active ? "bg-[#e3f3fd] text-[#0d47a1]" : "text-white/55 hover:bg-white/5 hover:text-white",
       )}
     >
-      <NavIcon size={20} weight="duotone" /> {label}
+      <NavIcon size={20} weight="duotone" /> <span className="flex-1">{label}</span>
+      {badge > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-[#ffffff]">{badge}</span>}
     </Link>
   );
 }

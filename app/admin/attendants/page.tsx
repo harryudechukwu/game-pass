@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Scan, Plus, X, Clock } from "@phosphor-icons/react";
+import { Scan, Plus, X, Clock, Key } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { timeAgo } from "@/lib/format";
 import { Loading, ErrorNote, Reveal } from "@/components/ui";
@@ -28,6 +28,14 @@ export default function AdminAttendantsPage() {
     setError("");
     try { await api(`/api/admin/attendants/${a.id}/grace`, { method: "POST", body: { minutes: mins } }); await load(); }
     catch (e) { setError(e instanceof ApiClientError ? e.message : "Could not grant time."); }
+  }
+  async function changePassword(a: Attendant) {
+    const pw = prompt(`Set a new password for ${a.name} (they'll use this to sign in):`, "");
+    if (pw == null) return; // cancelled
+    if (pw.trim().length < 4) { setError("Password must be at least 4 characters."); return; }
+    setError("");
+    try { await api(`/api/admin/attendants/${a.id}`, { method: "PATCH", body: { password: pw.trim() } }); await load(); }
+    catch (e) { setError(e instanceof ApiClientError ? e.message : "Could not change password."); }
   }
 
   if (loading) return <Loading />;
@@ -59,6 +67,7 @@ export default function AdminAttendantsPage() {
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1.5">
               {a.active && <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={() => grantGrace(a)}><Clock size={13} /> Grant time</button>}
+              <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={() => changePassword(a)}><Key size={13} /> Password</button>
               <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={() => setActive(a, !a.active)}>{a.active ? "Deactivate" : "Reactivate"}</button>
             </div>
           </div>

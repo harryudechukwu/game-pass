@@ -42,7 +42,8 @@ function sGame(g: Game) {
   };
 }
 function sItem(i: Item) {
-  return { id: i._id, name: i.name, description: i.description, icon: i.icon, priceKobo: i.priceKobo, priceLabel: ngn(i.priceKobo), active: i.active };
+  const lowStockAt = i.lowStockAt ?? 5;
+  return { id: i._id, name: i.name, description: i.description, icon: i.icon, priceKobo: i.priceKobo, priceLabel: ngn(i.priceKobo), active: i.active, stock: i.stock ?? null, lowStockAt, low: i.stock != null && i.stock <= lowStockAt };
 }
 function gameStatus(p: Purchase): "heads_up" | "active" | "completed" | null {
   if (p.kind !== "game" || p.mainEndsAt == null) return null;
@@ -367,6 +368,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
       if (!item.active) throw new HttpError(409, "item_unavailable", "That item is not available.");
       const qty = Math.max(1, Math.floor(Number(b.quantity ?? 1)) || 1);
       purchase = { _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null };
+      if (item.stock != null) await c.items.updateOne({ _id: item._id }, { $inc: { stock: -qty } });
     }
     await c.purchases.insertOne(purchase);
     const spent = await spentOf(c, player._id);
@@ -420,6 +422,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
         if (!item.active) throw new HttpError(409, "item_unavailable", `${item.name} is not available.`);
         const qty = Math.max(1, Math.floor(Number(line.quantity ?? 1)) || 1);
         toInsert.push({ _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null });
+        if (item.stock != null) await c.items.updateOne({ _id: item._id }, { $inc: { stock: -qty } });
       }
     }
     await c.purchases.insertMany(toInsert);
@@ -498,6 +501,13 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   if (r[1] === "me" && method === "GET") {
     const a = await requireAdmin(ctx, c);
     return { admin: { id: a._id, name: a.name, email: a.email, role: a.role } };
+  }
+  // low-stock notification count for the console (active, stock-tracked items at/under their threshold)
+  if (r[1] === "alerts" && method === "GET") {
+    await requireAdmin(ctx, c);
+    const items = await c.items.find({ active: true }).toArray();
+    const lowStock = items.filter((i) => i.stock != null && i.stock <= (i.lowStockAt ?? 5)).length;
+    return { lowStock };
   }
 
   if (r[1] === "settings" && method === "GET") {
@@ -673,7 +683,9 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     await requireAdmin(ctx, c);
     const name = String(b.name ?? "").trim();
     if (!name) throw new HttpError(400, "validation_error", "Name is required.");
-    const item: Item = { _id: newId("item"), name, description: (b.description as string) || null, icon: String(b.icon ?? "coins"), priceKobo: Math.max(0, Math.round(Number(b.priceKobo ?? 0))), active: b.active !== false, createdAt: Date.now() };
+    const stock = b.stock === "" || b.stock == null ? null : Math.max(0, Math.round(Number(b.stock)));
+    const lowStockAt = Math.max(0, Math.round(Number(b.lowStockAt)) || 5);
+    const item: Item = { _id: newId("item"), name, description: (b.description as string) || null, icon: String(b.icon ?? "coins"), priceKobo: Math.max(0, Math.round(Number(b.priceKobo ?? 0))), active: b.active !== false, stock, lowStockAt, createdAt: Date.now() };
     await c.items.insertOne(item);
     return { item: sItem(item) };
   }
@@ -685,6 +697,8 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     if ("icon" in b) set.icon = String(b.icon);
     if ("priceKobo" in b) set.priceKobo = Math.max(0, Math.round(Number(b.priceKobo)));
     if ("active" in b) set.active = Boolean(b.active);
+    if ("stock" in b) set.stock = b.stock === "" || b.stock == null ? null : Math.max(0, Math.round(Number(b.stock)));
+    if ("lowStockAt" in b) set.lowStockAt = Math.max(0, Math.round(Number(b.lowStockAt)) || 5);
     const res = await c.items.findOneAndUpdate({ _id: r[2] }, { $set: set }, { returnDocument: "after" });
     if (!res) throw new HttpError(404, "item_not_found", "Item not found.");
     return { item: sItem(res) };
@@ -754,9 +768,17 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   // activate / deactivate (soft delete — we keep former-employee records)
   if (r[1] === "attendants" && r[2] && method === "PATCH") {
     await requireAdmin(ctx, c);
-    const res = await c.attendants.findOneAndUpdate({ _id: r[2] }, { $set: { active: b.active !== false } }, { returnDocument: "after" });
+    const set: Record<string, unknown> = {};
+    if ("active" in b) set.active = b.active !== false;
+    if ("password" in b) {
+      const pw = String(b.password ?? "").trim();
+      if (pw.length < 4) throw new HttpError(400, "validation_error", "Password must be at least 4 characters.");
+      set.password = pw; // stored as-is so managers/admins can still reveal it
+    }
+    if (!Object.keys(set).length) throw new HttpError(400, "validation_error", "Nothing to update.");
+    const res = await c.attendants.findOneAndUpdate({ _id: r[2] }, { $set: set }, { returnDocument: "after" });
     if (!res) throw new HttpError(404, "not_found", "Attendant not found.");
-    return { attendant: { id: res._id, active: res.active !== false } };
+    return { attendant: { id: res._id, active: res.active !== false, password: res.password } };
   }
 
   // managers — limited operators, stored as admin docs with role "manager" (admin only)
