@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { SquaresFour, GameController, ShoppingBag, Trophy, Users, ClockCounterClockwise, SignOut, ShieldCheck, Scan, UserGear, Receipt, ChartBar, ChartLineUp, IconContext, type Icon } from "@phosphor-icons/react";
+import { SquaresFour, GameController, ShoppingBag, Package, Trophy, Users, ClockCounterClockwise, SignOut, ShieldCheck, Scan, UserGear, Receipt, ChartBar, ChartLineUp, IconContext, type Icon } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading } from "@/components/ui";
 
@@ -18,6 +18,7 @@ const nav = [
   { href: "/admin/analytics", label: "Analytics", icon: ChartLineUp, roles: ["admin", "staff", "manager"] },
   { href: "/admin/games", label: "Games", icon: GameController, roles: ["admin", "staff", "manager"] },
   { href: "/admin/items", label: "Items", icon: ShoppingBag, roles: ["admin", "staff", "manager"] },
+  { href: "/admin/inventory", label: "Inventory", icon: Package, roles: ["admin", "staff", "manager"] },
   { href: "/admin/sales", label: "Sales", icon: Receipt, roles: ["admin", "staff", "manager"] },
   { href: "/admin/rewards", label: "Rewards", icon: Trophy, roles: ["admin", "staff"] },
   { href: "/admin/attendants", label: "Attendants", icon: Scan, roles: ["admin", "staff", "manager"] },
@@ -26,7 +27,7 @@ const nav = [
   { href: "/admin/logs", label: "Logs", icon: ClockCounterClockwise, roles: ["admin", "staff"] },
 ];
 // managers get a limited console: only the catalogue pages
-const managerAllowed = (path: string) => ["/admin/overview", "/admin/analytics", "/admin/games", "/admin/items", "/admin/sales", "/admin/attendants", "/admin/players"].some((p) => path.startsWith(p));
+const managerAllowed = (path: string) => ["/admin/overview", "/admin/analytics", "/admin/games", "/admin/items", "/admin/inventory", "/admin/sales", "/admin/attendants", "/admin/players"].some((p) => path.startsWith(p));
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -82,7 +83,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
           <nav className="flex-1 space-y-1">
             {visibleNav.map((n) => (
-              <NavLink key={n.href} {...n} active={isActive(pathname, n.href)} badge={n.href === "/admin/items" ? lowStock : 0} />
+              <NavLink key={n.href} {...n} active={isActive(pathname, n.href)} badge={n.href === "/admin/inventory" ? lowStock : 0} />
             ))}
           </nav>
           <div className="border-t border-white/10 pt-3">
@@ -116,7 +117,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   isActive(pathname, n.href) ? "bg-white/10 text-white" : "text-white/50",
                 )}
               >
-                {n.label}{n.href === "/admin/items" && lowStock > 0 ? ` (${lowStock})` : ""}
+                {n.label}{n.href === "/admin/inventory" && lowStock > 0 ? ` (${lowStock})` : ""}
               </Link>
             ))}
           </div>

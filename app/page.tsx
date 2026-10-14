@@ -3,11 +3,9 @@
 import Link from "next/link";
 import { NavigationArrow, SignIn, IceCream } from "@phosphor-icons/react";
 
-// Opening Google Maps with just a destination lets Maps use the visitor's own
-// current location as the start (GPS on mobile) — no manual location entry.
-// TODO: swap the query for the venue's exact address or coordinates.
-const VENUE = "Creamy Castle, Ogidi";
-const DIRECTIONS_URL = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(VENUE)}`;
+// The venue's Google Maps pin — opens Maps where the visitor can tap Directions
+// (Maps uses their current location as the start).
+const DIRECTIONS_URL = "https://maps.app.goo.gl/hHBoj3jFQM8Ugw6i8";
 
 export default function LandingPage() {
   return (
