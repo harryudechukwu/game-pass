@@ -2,7 +2,8 @@ import { nanoid } from "nanoid";
 import { money } from "@/lib/format";
 import { cols } from "@/lib/server/db";
 import { verifyPassword } from "@/lib/server/password";
-import { venueNow, venueDate, venueDayRange, venueTimeEpoch, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
+import { knownItemCost, snapshotItemCost, summarizeItemSales } from "@/lib/server/item-profit";
+import { venueNow, venueDayRange, venueTimeEpoch, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
 import type { SessionCtx } from "@/lib/server/session";
 import type { Attendant, Game, Item, Player, Purchase, Reward } from "@/lib/server/types";
 
@@ -44,6 +45,9 @@ function sGame(g: Game) {
 function sItem(i: Item) {
   const lowStockAt = i.lowStockAt ?? 5;
   return { id: i._id, name: i.name, description: i.description, icon: i.icon, priceKobo: i.priceKobo, priceLabel: ngn(i.priceKobo), active: i.active, stock: i.stock ?? null, lowStockAt, low: i.stock != null && i.stock <= lowStockAt };
+}
+function sAdminItem(i: Item) {
+  return { ...sItem(i), costPriceKobo: i.costPriceKobo ?? null, costPriceLabel: i.costPriceKobo == null ? null : ngn(i.costPriceKobo) };
 }
 function gameStatus(p: Purchase): "heads_up" | "active" | "completed" | null {
   if (p.kind !== "game" || p.mainEndsAt == null) return null;
@@ -168,19 +172,20 @@ async function periodMatch(c: Cols, query: URLSearchParams) {
   const period = all ? "all" : raw === "custom" ? "custom" : "today";
   return { tz, period, days, all, ranges, dateClause, match: { voidedAt: null, ...dateClause("createdAt") } };
 }
-// list of venue dates (YYYY-MM-DD) from start..end inclusive, capped
-function venueDaysList(tz: string, startDate: string, endDate: string, cap = 92): string[] {
-  const out: string[] = [];
-  let cur = startDate;
-  for (let i = 0; i < cap && cur <= endDate; i++) {
-    out.push(cur);
-    cur = venueNow(tz, venueDayRange(tz, cur)[1] + 60000).date;
-  }
-  return out;
-}
-
 // ── router ────────────────────────────────────────────────────────────────
 type Body = Record<string, unknown>;
+
+function itemPrice(v: unknown, label: string): number {
+  const n = Number(v);
+  if (v === "" || v == null || !Number.isSafeInteger(n) || n < 0) {
+    throw new HttpError(400, "validation_error", `${label} must be a non-negative amount.`);
+  }
+  return n;
+}
+
+function percent(part: number, total: number): number | null {
+  return total > 0 ? Math.round((part / total) * 1000) / 10 : null;
+}
 
 export async function handle(path: string, method: string, body: Body, ctx: SessionCtx, query: URLSearchParams): Promise<unknown> {
   const c = await cols();
@@ -367,7 +372,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
       if (!item) throw new HttpError(404, "item_not_found", "Pick an item.");
       if (!item.active) throw new HttpError(409, "item_unavailable", "That item is not available.");
       const qty = Math.max(1, Math.floor(Number(b.quantity ?? 1)) || 1);
-      purchase = { _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null };
+      purchase = { _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, ...snapshotItemCost(item.costPriceKobo, qty), quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null };
       if (item.stock != null) await c.items.updateOne({ _id: item._id }, { $inc: { stock: -qty } });
     }
     await c.purchases.insertOne(purchase);
@@ -421,7 +426,7 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
         if (!item) throw new HttpError(404, "item_not_found", "One of the items wasn't found.");
         if (!item.active) throw new HttpError(409, "item_unavailable", `${item.name} is not available.`);
         const qty = Math.max(1, Math.floor(Number(line.quantity ?? 1)) || 1);
-        toInsert.push({ _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null });
+        toInsert.push({ _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, ...snapshotItemCost(item.costPriceKobo, qty), quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null });
         if (item.stock != null) await c.items.updateOne({ _id: item._id }, { $inc: { stock: -qty } });
       }
     }
@@ -582,41 +587,66 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   if (r[1] === "analytics" && method === "GET") {
     await requireAdmin(ctx, c); // managers may see analytics
     const { match, tz, period, days, all, ranges } = await periodMatch(c, query);
-    const now = Date.now();
     const purchases = await c.purchases.find(match).toArray();
 
-    // trend buckets keyed by venue-local day
-    const bmap = new Map<string, { rev: number; games: number; items: number }>();
+    // Trend buckets keyed by venue-local day; today's chart also uses venue-local hours.
+    const bmap = new Map<string, { rev: number; games: number; items: number; itemRev: number; coveredRev: number; itemCost: number; coveredLines: number }>();
+    const hourlyTotals = period === "today" ? Array<number>(24).fill(0) : [];
     for (const p of purchases) {
-      const d = venueDate(tz, p.createdAt);
-      const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0 };
+      const localTime = venueNow(tz, p.createdAt);
+      const d = localTime.date;
+      if (period === "today") hourlyTotals[Math.floor(localTime.minutes / 60)] += p.amountKobo;
+      const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0, itemRev: 0, coveredRev: 0, itemCost: 0, coveredLines: 0 };
       b.rev += p.amountKobo;
-      if (p.kind === "game") b.games += 1; else b.items += p.quantity;
+      if (p.kind === "game") b.games += 1;
+      else {
+        b.items += p.quantity;
+        b.itemRev += p.amountKobo;
+        const cost = knownItemCost(p);
+        if (cost != null) { b.coveredRev += p.amountKobo; b.itemCost += cost; b.coveredLines += 1; }
+      }
       bmap.set(d, b);
     }
     let axis: string[];
     if (all) {
-      const first = purchases.length ? purchases.reduce((m, p) => Math.min(m, p.createdAt), now) : now;
-      axis = venueDaysList(tz, venueDate(tz, first), venueNow(tz, now).date);
+      axis = [...bmap.keys()].sort(); // include every day with sales, even beyond the old 92-day cap
     } else {
       axis = [...days].sort();
     }
-    const trends = axis.map((d) => { const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0 }; return { date: d, revenueKobo: b.rev, revenueLabel: money(b.rev, "NGN"), games: b.games, items: b.items }; });
+    const trends = axis.map((d) => {
+      const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0, itemRev: 0, coveredRev: 0, itemCost: 0, coveredLines: 0 };
+      const itemProfitKobo = b.coveredLines ? b.coveredRev - b.itemCost : null;
+      return { date: d, revenueKobo: b.rev, revenueLabel: money(b.rev, "NGN"), games: b.games, items: b.items,
+        itemRevenueKobo: b.itemRev, itemRevenueLabel: money(b.itemRev, "NGN"), itemProfitKobo,
+        itemProfitLabel: itemProfitKobo == null ? null : ngn(itemProfitKobo), itemCoveragePct: percent(b.coveredRev, b.itemRev) };
+    });
+    const hourlyRevenue = hourlyTotals.map((revenueKobo, hour) => ({ hour, revenueKobo, revenueLabel: money(revenueKobo, "NGN") }));
 
     // top games / items
     const gStats = new Map<string, { name: string; plays: number; rev: number }>();
-    const iStats = new Map<string, { name: string; qty: number; rev: number }>();
+    const iStats = new Map<string, { name: string; qty: number; rev: number; coveredRev: number; cost: number; coveredLines: number }>();
     for (const p of purchases) {
       if (p.kind === "game") {
         const s = gStats.get(p.refId) ?? { name: p.name, plays: 0, rev: 0 };
         s.plays += 1; s.rev += p.amountKobo; gStats.set(p.refId, s);
       } else {
-        const s = iStats.get(p.refId) ?? { name: p.name, qty: 0, rev: 0 };
-        s.qty += p.quantity; s.rev += p.amountKobo; iStats.set(p.refId, s);
+        const s = iStats.get(p.refId) ?? { name: p.name, qty: 0, rev: 0, coveredRev: 0, cost: 0, coveredLines: 0 };
+        s.qty += p.quantity; s.rev += p.amountKobo;
+        const cost = knownItemCost(p);
+        if (cost != null) { s.coveredRev += p.amountKobo; s.cost += cost; s.coveredLines += 1; }
+        iStats.set(p.refId, s);
       }
     }
     const topGames = [...gStats.values()].sort((a, b) => b.rev - a.rev).slice(0, 6).map((s) => ({ name: s.name, plays: s.plays, revenueKobo: s.rev, revenueLabel: money(s.rev, "NGN") }));
     const topItems = [...iStats.values()].sort((a, b) => b.rev - a.rev).slice(0, 6).map((s) => ({ name: s.name, qty: s.qty, revenueKobo: s.rev, revenueLabel: money(s.rev, "NGN") }));
+    const itemProfit = [...iStats.entries()].sort((a, b) => b[1].rev - a[1].rev).map(([id, s]) => ({
+      id, name: s.name, qty: s.qty, revenueKobo: s.rev, revenueLabel: money(s.rev, "NGN"),
+      coveredRevenueKobo: s.coveredRev, costKobo: s.cost,
+      costLabel: s.coveredLines ? money(s.cost, "NGN") : null,
+      profitKobo: s.coveredLines ? s.coveredRev - s.cost : null,
+      profitLabel: s.coveredLines ? ngn(s.coveredRev - s.cost) : null,
+      coveragePct: percent(s.coveredRev, s.rev),
+    }));
 
     // category (kids/teen) + type (games/items) splits
     const games = await c.games.find({ _id: { $in: [...gStats.keys()] } }).toArray();
@@ -624,7 +654,8 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     let kidsKobo = 0, teenKobo = 0;
     for (const [refId, s] of gStats) { if (gcat.get(refId) === "kids") kidsKobo += s.rev; else teenKobo += s.rev; }
     const gamesKobo = purchases.filter((p) => p.kind === "game").reduce((n, p) => n + p.amountKobo, 0);
-    const itemsKobo = purchases.filter((p) => p.kind === "item").reduce((n, p) => n + p.amountKobo, 0);
+    const { itemRevenueKobo: itemsKobo, coveredRevenueKobo: coveredItemRevenueKobo, costKobo: itemCostKobo,
+      grossProfitKobo: itemGrossProfitKobo, costedItemLines, itemLines } = summarizeItemSales(purchases);
 
     // attendant performance (orders ≈ distinct player+timestamp)
     const aStats = new Map<string, { orders: Set<string>; rev: number }>();
@@ -653,7 +684,16 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     return {
       period, days,
       totalRevenueLabel: money(gamesKobo + itemsKobo, "NGN"),
-      trends, topGames, topItems,
+      trends, hourlyRevenue, topGames, topItems, itemProfit,
+      itemFinancials: {
+        itemRevenueKobo: itemsKobo, itemRevenueLabel: money(itemsKobo, "NGN"),
+        coveredRevenueKobo: coveredItemRevenueKobo, coveredRevenueLabel: money(coveredItemRevenueKobo, "NGN"),
+        costKobo: itemCostKobo, costLabel: money(itemCostKobo, "NGN"),
+        grossProfitKobo: itemGrossProfitKobo, grossProfitLabel: ngn(itemGrossProfitKobo),
+        marginPct: percent(itemGrossProfitKobo, coveredItemRevenueKobo),
+        coveragePct: percent(coveredItemRevenueKobo, itemsKobo),
+        costedItemLines, itemLines,
+      },
       categorySplit: { kidsKobo, teenKobo, kidsLabel: money(kidsKobo, "NGN"), teenLabel: money(teenKobo, "NGN") },
       typeSplit: { gamesKobo, itemsKobo, gamesLabel: money(gamesKobo, "NGN"), itemsLabel: money(itemsKobo, "NGN") },
       attendants, newCount, returningCount, topSpenders,
@@ -678,16 +718,16 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
   }
 
   // items
-  if (r[1] === "items" && !r[2] && method === "GET") { await requireAdmin(ctx, c); return { items: (await c.items.find({}).toArray()).map(sItem) }; }
+  if (r[1] === "items" && !r[2] && method === "GET") { await requireAdmin(ctx, c); return { items: (await c.items.find({}).toArray()).map(sAdminItem) }; }
   if (r[1] === "items" && !r[2] && method === "POST") {
     await requireAdmin(ctx, c);
     const name = String(b.name ?? "").trim();
     if (!name) throw new HttpError(400, "validation_error", "Name is required.");
     const stock = b.stock === "" || b.stock == null ? null : Math.max(0, Math.round(Number(b.stock)));
     const lowStockAt = Math.max(0, Math.round(Number(b.lowStockAt)) || 5);
-    const item: Item = { _id: newId("item"), name, description: (b.description as string) || null, icon: String(b.icon ?? "coins"), priceKobo: Math.max(0, Math.round(Number(b.priceKobo ?? 0))), active: b.active !== false, stock, lowStockAt, createdAt: Date.now() };
+    const item: Item = { _id: newId("item"), name, description: (b.description as string) || null, icon: String(b.icon ?? "coins"), priceKobo: itemPrice(b.priceKobo, "Selling price"), costPriceKobo: itemPrice(b.costPriceKobo, "Cost price"), active: b.active !== false, stock, lowStockAt, createdAt: Date.now() };
     await c.items.insertOne(item);
-    return { item: sItem(item) };
+    return { item: sAdminItem(item) };
   }
   if (r[1] === "items" && r[2] && method === "PATCH") {
     await requireAdmin(ctx, c);
@@ -695,13 +735,14 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     if ("name" in b) set.name = String(b.name);
     if ("description" in b) set.description = (b.description as string) || null;
     if ("icon" in b) set.icon = String(b.icon);
-    if ("priceKobo" in b) set.priceKobo = Math.max(0, Math.round(Number(b.priceKobo)));
+    if ("priceKobo" in b) set.priceKobo = itemPrice(b.priceKobo, "Selling price");
+    if ("costPriceKobo" in b) set.costPriceKobo = b.costPriceKobo == null || b.costPriceKobo === "" ? null : itemPrice(b.costPriceKobo, "Cost price");
     if ("active" in b) set.active = Boolean(b.active);
     if ("stock" in b) set.stock = b.stock === "" || b.stock == null ? null : Math.max(0, Math.round(Number(b.stock)));
     if ("lowStockAt" in b) set.lowStockAt = Math.max(0, Math.round(Number(b.lowStockAt)) || 5);
     const res = await c.items.findOneAndUpdate({ _id: r[2] }, { $set: set }, { returnDocument: "after" });
     if (!res) throw new HttpError(404, "item_not_found", "Item not found.");
-    return { item: sItem(res) };
+    return { item: sAdminItem(res) };
   }
   if (r[1] === "items" && r[2] && method === "DELETE") {
     await requireAdmin(ctx, c, "admin");
@@ -888,6 +929,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     if (newQty === purchase.quantity) return { ok: true, unchanged: true };
     const unit = Math.round(purchase.amountKobo / Math.max(1, purchase.quantity));
     const set: Record<string, unknown> = { quantity: newQty, amountKobo: unit * newQty, editedAt: Date.now(), editedByName: me.name };
+    if (purchase.kind === "item" && purchase.unitCostKobo != null) set.costAmountKobo = snapshotItemCost(purchase.unitCostKobo, newQty).costAmountKobo;
     if (purchase.originalQuantity == null) { set.originalQuantity = purchase.quantity; set.originalAmountKobo = purchase.amountKobo; }
     if (purchase.kind === "game" && purchase.headsUpEndsAt != null && purchase.mainEndsAt != null) {
       const perUnit = (purchase.mainEndsAt - purchase.headsUpEndsAt) / Math.max(1, purchase.quantity);

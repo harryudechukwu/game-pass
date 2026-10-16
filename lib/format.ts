@@ -6,7 +6,9 @@ export function pts(n: number): string {
 
 export function money(kobo: number, currency = "NGN"): string {
   const symbol = currency === "NGN" ? "₦" : "";
-  return `${symbol}${(kobo / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const fractionDigits = Math.abs(kobo) % 100 === 0 ? 0 : 2;
+  const amount = (Math.abs(kobo) / 100).toLocaleString(undefined, { minimumFractionDigits: fractionDigits, maximumFractionDigits: 2 });
+  return `${kobo < 0 ? "-" : ""}${symbol}${amount}`;
 }
 
 // A game's duration label: 0 (or less) = unlimited, whole hours shown as hours,

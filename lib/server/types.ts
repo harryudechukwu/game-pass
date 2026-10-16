@@ -30,6 +30,7 @@ export type Item = {
   description: string | null;
   icon: string;
   priceKobo: number;
+  costPriceKobo?: number | null; // missing on items created before cost tracking
   active: boolean;
   stock?: number | null; // null/undefined = not stock-tracked
   lowStockAt?: number; // low-stock alert threshold (default 5)
@@ -44,6 +45,8 @@ export type Purchase = {
   name: string;
   icon: string;
   amountKobo: number;
+  unitCostKobo?: number | null; // item cost captured when the sale was logged
+  costAmountKobo?: number | null; // total item cost; missing on older sales
   quantity: number;
   attendantId: string | null;
   createdAt: number;

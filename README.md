@@ -27,6 +27,17 @@ rewards.
    finishes; the **spend counts immediately**.
 4. Items add to spend with no timer.
 
+## Item gross profit
+
+Operators set an item's selling price and cost price on the Items page. New items
+require both prices; existing items can be given a cost price when it is known.
+Each item sale saves the cost that was current at checkout, so later price changes
+do not alter historical results. Analytics shows item revenue, recorded cost of
+goods sold, gross profit, margin, and cost coverage for each period and item.
+Sales made before cost tracking (or before an existing item's cost was set) remain
+in revenue but are excluded from gross profit. Voided sales are excluded from
+both. Gross profit does not include game costs or other business expenses.
+
 ## Surfaces
 
 | Surface | URL | Who |

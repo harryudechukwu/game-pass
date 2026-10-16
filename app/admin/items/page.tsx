@@ -12,6 +12,8 @@ type Item = {
   icon: string;
   priceKobo: number;
   priceLabel: string;
+  costPriceKobo: number | null;
+  costPriceLabel: string | null;
   active: boolean;
   stock: number | null;
   lowStockAt: number;
@@ -40,12 +42,12 @@ export default function AdminItemsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="admin-head flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="admin-head space-y-3">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Items</h1>
           <p className="text-sm text-white/50">Things sold in the playground — attendants add these to a guest&apos;s spend.</p>
         </div>
-        <button className="btn-primary w-full md:w-auto" onClick={() => setEditing({ icon: "coins", priceKobo: 50000, active: true })}><Plus size={18} /> New item</button>
+        <button className="btn-primary w-full" onClick={() => setEditing({ icon: "coins", priceKobo: 50000, active: true })}><Plus size={18} /> New item</button>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -62,9 +64,10 @@ export default function AdminItemsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="truncate font-bold">{i.name}</h3>
-                  <span className="pill shrink-0">{i.priceLabel}</span>
+                  <span className="pill shrink-0">Sell {i.priceLabel}</span>
                 </div>
                 <p className="text-xs text-white/45">{i.description}</p>
+                <p className="mt-1 text-xs text-white/55">Cost {i.costPriceLabel ?? "Not set"}</p>
                 {i.stock != null && (
                   <p className={`mt-1 text-xs font-bold ${i.stock <= 0 ? "text-red-600" : i.low ? "text-amber-600" : "text-white/55"}`}>
                     {i.stock <= 0 ? "Out of stock" : i.low ? `Low stock · ${i.stock} left` : `${i.stock} in stock`}
@@ -92,17 +95,33 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
     name: initial.name ?? "",
     description: initial.description ?? "",
     icon: initial.icon ?? "coins",
-    priceNaira: initial.priceKobo != null ? Math.round(initial.priceKobo / 100) : 500,
+    priceNaira: String((initial.priceKobo ?? 50000) / 100),
+    costNaira: initial.costPriceKobo == null ? "" : String(initial.costPriceKobo / 100),
     stock: initial.stock != null ? String(initial.stock) : "",
     lowStockAt: initial.lowStockAt ?? 5,
     active: initial.active ?? true,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const validPrice = (v: string) => v.trim() !== "" && Number.isFinite(Number(v)) && Number(v) >= 0;
+  const valid = form.name.trim() !== "" && validPrice(form.priceNaira) && (isEdit ? form.costNaira === "" || validPrice(form.costNaira) : validPrice(form.costNaira));
 
   async function save() {
+    if (!valid) return;
+    const next = { name: form.name, description: form.description || null, icon: form.icon,
+      priceKobo: Math.round(Number(form.priceNaira) * 100),
+      costPriceKobo: form.costNaira === "" ? null : Math.round(Number(form.costNaira) * 100),
+      stock: form.stock === "" ? null : Number(form.stock), lowStockAt: Number(form.lowStockAt), active: form.active };
+    const previous = { name: initial.name ?? "", description: initial.description ?? null, icon: initial.icon ?? "coins",
+      priceKobo: initial.priceKobo ?? 50000, costPriceKobo: initial.costPriceKobo ?? null,
+      stock: initial.stock ?? null, lowStockAt: initial.lowStockAt ?? 5, active: initial.active ?? true };
+    // Send only edited fields so changing a cost cannot reset stock sold while
+    // the form was open or overwrite another operator's price change.
+    const payload = isEdit
+      ? Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== previous[key as keyof typeof previous]))
+      : next;
+    if (isEdit && Object.keys(payload).length === 0) { onClose(); return; }
     setBusy(true); setError("");
-    const payload = { name: form.name, description: form.description || null, icon: form.icon, priceKobo: Number(form.priceNaira) * 100, stock: form.stock === "" ? null : Number(form.stock), lowStockAt: Number(form.lowStockAt), active: form.active };
     try {
       if (isEdit) await api(`/api/admin/items/${initial.id}`, { method: "PATCH", body: payload });
       else await api("/api/admin/items", { method: "POST", body: payload });
@@ -121,7 +140,11 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
         <div className="space-y-4">
           <div><label className="label">Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Bottled Water" /></div>
           <div><label className="label">Description</label><input className="input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-          <div><label className="label">Price (₦)</label><input type="number" className="input" value={form.priceNaira} onChange={(e) => setForm({ ...form, priceNaira: e.target.value as never })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Selling price (₦)</label><input type="number" min={0} step="0.01" className="input" value={form.priceNaira} onChange={(e) => setForm({ ...form, priceNaira: e.target.value })} /></div>
+            <div><label className="label">Cost price (₦)</label><input type="number" min={0} step="0.01" className="input" value={form.costNaira} onChange={(e) => setForm({ ...form, costNaira: e.target.value })} placeholder={isEdit ? "Not set" : "Required"} /></div>
+          </div>
+          <p className="text-xs text-white/50">Cost is saved with each new sale for gross-profit reports. Editing it will not change earlier sales.</p>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Stock</label><input type="number" min={0} className="input" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} placeholder="blank = not tracked" /></div>
             <div><label className="label">Alert at</label><input type="number" min={0} className="input" value={form.lowStockAt} onChange={(e) => setForm({ ...form, lowStockAt: e.target.value as never })} /></div>
@@ -130,7 +153,7 @@ function ItemForm({ initial, onClose, onSaved }: { initial: Partial<Item>; onClo
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
-          <button className="btn-primary" onClick={save} disabled={busy || !form.name}>{busy ? "Saving…" : "Save"}</button>
+          <button className="btn-primary" onClick={save} disabled={busy || !valid}>{busy ? "Saving…" : "Save"}</button>
         </div>
       </div>
     </div>
