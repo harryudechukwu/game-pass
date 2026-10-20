@@ -3,7 +3,8 @@ import { money } from "@/lib/format";
 import { cols } from "@/lib/server/db";
 import { verifyPassword } from "@/lib/server/password";
 import { knownItemCost, snapshotItemCost, summarizeItemSales } from "@/lib/server/item-profit";
-import { venueNow, venueDayRange, venueTimeEpoch, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
+import { memberSpendById } from "@/lib/server/customer-spend";
+import { venueNow, venueDayRange, venueDateOnlyEpoch, venueDateTimeEpoch, venueTimeEpoch, saleHour, DEFAULT_TZ, minutesLabel } from "@/lib/server/tz";
 import type { SessionCtx } from "@/lib/server/session";
 import type { Attendant, Game, Item, Player, Purchase, Reward } from "@/lib/server/types";
 
@@ -59,7 +60,10 @@ function gameStatus(p: Purchase): "heads_up" | "active" | "completed" | null {
 function sPurchase(p: Purchase) {
   return {
     id: p._id, kind: p.kind, name: p.name, icon: p.icon, amountKobo: p.amountKobo, amountLabel: ngn(p.amountKobo),
+    walkIn: p.playerId == null,
     quantity: p.quantity, createdAt: iso(p.createdAt), location: p.location,
+    entrySource: p.entrySource ?? null, recordedAt: iso(p.recordedAt), recordedByName: p.recordedByName ?? null, entryNote: p.entryNote ?? null,
+    occurredDate: p.occurredDate ?? null, occurredTime: p.occurredTime ?? null, entryTimezone: p.entryTimezone ?? null,
     headsUpEndsAt: iso(p.headsUpEndsAt), mainEndsAt: iso(p.mainEndsAt), sessionStatus: gameStatus(p),
     voided: p.voidedAt != null,
   };
@@ -309,18 +313,18 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     return { games: games.map(sGame), items: items.map(sItem), headsUpSeconds: settings?.headsUpSeconds ?? 60 };
   }
 
-  // live game timers for the time-keeping tab (every player's running / just-ended session)
+  // live game timers for the time-keeping tab (including walk-in sessions)
   if (r[0] === "attendant" && r[1] === "sessions" && method === "GET") {
     await requireAttendant(ctx, c);
     const now = Date.now();
     const since = now - 30 * 60 * 1000;
     const rows = await c.purchases.find({ kind: "game", voidedAt: null, mainEndsAt: { $gt: since } }).sort({ mainEndsAt: 1 }).toArray();
-    const ids = Array.from(new Set(rows.map((p) => p.playerId)));
+    const ids = Array.from(new Set(rows.map((p) => p.playerId).filter((id): id is string => id != null)));
     const players = ids.length ? await c.players.find({ _id: { $in: ids } }).toArray() : [];
     return {
       sessions: rows.map((p) => {
         const pl = players.find((x) => x._id === p.playerId);
-        return { id: p._id, game: p.name, quantity: p.quantity, name: pl?.name ?? null, phone: pl?.phone ?? "", headsUpEndsAt: p.headsUpEndsAt, mainEndsAt: p.mainEndsAt };
+        return { id: p._id, game: p.name, quantity: p.quantity, name: p.playerId == null ? `Walk-in guest · ${p._id.slice(-5)}` : pl?.name ?? null, phone: pl?.phone ?? "", headsUpEndsAt: p.headsUpEndsAt, mainEndsAt: p.mainEndsAt };
       }),
     };
   }
@@ -335,21 +339,23 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   if (r[0] === "attendant" && r[1] === "purchase" && method === "POST") {
     const att = await requireAttendant(ctx, c);
     await assertLoggingOpen(c, att);
+    const walkIn = b.walkIn === true;
     const phone = normPhone(b.phone);
-    if (phone.length < 6) throw new HttpError(400, "validation_error", "Enter the player's phone number.");
+    if (!walkIn && phone.length < 6) throw new HttpError(400, "validation_error", "Enter the player's phone number or select walk-in guest.");
     const kind = b.kind === "item" ? "item" : "game";
-    let player = await c.players.findOne({ phone });
+    let player: Player | null = walkIn ? null : await c.players.findOne({ phone });
     let isNewPlayer = false;
-    if (!player) {
+    if (!walkIn && !player) {
       player = { _id: newId("ply"), phone, name: (b.name as string)?.trim() || null, createdAt: Date.now() };
       await c.players.insertOne(player);
       isNewPlayer = true;
-    } else if (!player.name && (b.name as string)?.trim()) {
+    } else if (player && !player.name && (b.name as string)?.trim()) {
       await c.players.updateOne({ _id: player._id }, { $set: { name: (b.name as string).trim() } });
     }
     const settings = await c.settings.findOne({ _id: "app" });
     const headsUpSeconds = settings?.headsUpSeconds ?? 60;
     const now = Date.now();
+    const orderId = newId("ord");
     let purchase: Purchase;
     if (kind === "game") {
       const game = await c.games.findOne({ _id: String(b.refId) });
@@ -366,16 +372,17 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
       } else {
         mainEndsAt = venueTimeEpoch(settings?.timezone || DEFAULT_TZ, settings?.storeCloseMin ?? 1020, now);
       }
-      purchase = { _id: newId("pur"), playerId: player._id, kind: "game", refId: game._id, name: game.name, icon: game.icon, amountKobo: hours * game.priceKobo, quantity: hours, attendantId: att._id, createdAt: now, headsUpEndsAt, mainEndsAt, location: game.location };
+      purchase = { _id: newId("pur"), playerId: player?._id ?? null, orderId, kind: "game", refId: game._id, name: game.name, icon: game.icon, amountKobo: hours * game.priceKobo, quantity: hours, attendantId: att._id, createdAt: now, headsUpEndsAt, mainEndsAt, location: game.location };
     } else {
       const item = await c.items.findOne({ _id: String(b.refId) });
       if (!item) throw new HttpError(404, "item_not_found", "Pick an item.");
       if (!item.active) throw new HttpError(409, "item_unavailable", "That item is not available.");
       const qty = Math.max(1, Math.floor(Number(b.quantity ?? 1)) || 1);
-      purchase = { _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, ...snapshotItemCost(item.costPriceKobo, qty), quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null };
+      purchase = { _id: newId("pur"), playerId: player?._id ?? null, orderId, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, ...snapshotItemCost(item.costPriceKobo, qty), quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null };
       if (item.stock != null) await c.items.updateOne({ _id: item._id }, { $inc: { stock: -qty } });
     }
     await c.purchases.insertOne(purchase);
+    if (!player) return { purchase: sPurchase(purchase), player: null, isNewPlayer: false, headsUpSeconds, unlockedRewards: [] };
     const spent = await spentOf(c, player._id);
     const rewards = await activeRewards(c);
     const redeemed = await redeemedIds(c, player._id);
@@ -383,27 +390,29 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
     return { purchase: sPurchase(purchase), player: { ...sPlayer(player), spentKobo: spent, spentLabel: ngn(spent) }, isNewPlayer, headsUpSeconds, unlockedRewards: unlocked };
   }
 
-  // batch: record several games/items for one player in a single order
+  // batch: record several games/items for a member or walk-in guest in one order
   if (r[0] === "attendant" && r[1] === "order" && method === "POST") {
     const att = await requireAttendant(ctx, c);
     await assertLoggingOpen(c, att);
+    const walkIn = b.walkIn === true;
     const phone = normPhone(b.phone);
-    if (phone.length < 6) throw new HttpError(400, "validation_error", "Enter the player's phone number.");
+    if (!walkIn && phone.length < 6) throw new HttpError(400, "validation_error", "Enter the player's phone number or select walk-in guest.");
     const lines = Array.isArray(b.lines) ? (b.lines as Record<string, unknown>[]) : [];
     if (lines.length === 0) throw new HttpError(400, "validation_error", "Add at least one game or item.");
     if (lines.length > 30) throw new HttpError(400, "validation_error", "That's too many lines for one order.");
-    let player = await c.players.findOne({ phone });
+    let player: Player | null = walkIn ? null : await c.players.findOne({ phone });
     let isNewPlayer = false;
-    if (!player) {
+    if (!walkIn && !player) {
       player = { _id: newId("ply"), phone, name: (b.name as string)?.trim() || null, createdAt: Date.now() };
       await c.players.insertOne(player);
       isNewPlayer = true;
-    } else if (!player.name && (b.name as string)?.trim()) {
+    } else if (player && !player.name && (b.name as string)?.trim()) {
       await c.players.updateOne({ _id: player._id }, { $set: { name: (b.name as string).trim() } });
     }
     const settings = await c.settings.findOne({ _id: "app" });
     const headsUpSeconds = settings?.headsUpSeconds ?? 60;
     const now = Date.now();
+    const orderId = newId("ord");
     const toInsert: Purchase[] = [];
     for (const line of lines) {
       const kind = line.kind === "item" ? "item" : "game";
@@ -420,22 +429,23 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
         } else {
           mainEndsAt = venueTimeEpoch(settings?.timezone || DEFAULT_TZ, settings?.storeCloseMin ?? 1020, now);
         }
-        toInsert.push({ _id: newId("pur"), playerId: player._id, kind: "game", refId: game._id, name: game.name, icon: game.icon, amountKobo: hours * game.priceKobo, quantity: hours, attendantId: att._id, createdAt: now, headsUpEndsAt, mainEndsAt, location: game.location });
+        toInsert.push({ _id: newId("pur"), playerId: player?._id ?? null, orderId, kind: "game", refId: game._id, name: game.name, icon: game.icon, amountKobo: hours * game.priceKobo, quantity: hours, attendantId: att._id, createdAt: now, headsUpEndsAt, mainEndsAt, location: game.location });
       } else {
         const item = await c.items.findOne({ _id: String(line.refId) });
         if (!item) throw new HttpError(404, "item_not_found", "One of the items wasn't found.");
         if (!item.active) throw new HttpError(409, "item_unavailable", `${item.name} is not available.`);
         const qty = Math.max(1, Math.floor(Number(line.quantity ?? 1)) || 1);
-        toInsert.push({ _id: newId("pur"), playerId: player._id, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, ...snapshotItemCost(item.costPriceKobo, qty), quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null });
+        toInsert.push({ _id: newId("pur"), playerId: player?._id ?? null, orderId, kind: "item", refId: item._id, name: item.name, icon: item.icon, amountKobo: qty * item.priceKobo, ...snapshotItemCost(item.costPriceKobo, qty), quantity: qty, attendantId: att._id, createdAt: now, headsUpEndsAt: null, mainEndsAt: null, location: null });
         if (item.stock != null) await c.items.updateOne({ _id: item._id }, { $inc: { stock: -qty } });
       }
     }
     await c.purchases.insertMany(toInsert);
+    const totalKobo = toInsert.reduce((s, p) => s + p.amountKobo, 0);
+    if (!player) return { purchases: toInsert.map(sPurchase), totalKobo, totalLabel: ngn(totalKobo), player: null, isNewPlayer: false, headsUpSeconds, hasGame: toInsert.some((p) => p.kind === "game" && p.mainEndsAt != null), unlockedRewards: [] };
     const spent = await spentOf(c, player._id);
     const rewards = await activeRewards(c);
     const redeemed = await redeemedIds(c, player._id);
     const unlocked = rewards.filter((x) => spent >= x.spendRequiredKobo && !redeemed.has(x._id)).map((x) => ({ id: x._id, name: x.name }));
-    const totalKobo = toInsert.reduce((s, p) => s + p.amountKobo, 0);
     return { purchases: toInsert.map(sPurchase), totalKobo, totalLabel: ngn(totalKobo), player: { ...sPlayer(player), spentKobo: spent, spentLabel: ngn(spent) }, isNewPlayer, headsUpSeconds, hasGame: toInsert.some((p) => p.kind === "game" && p.mainEndsAt != null), unlockedRewards: unlocked };
   }
 
@@ -463,9 +473,9 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   if (r[0] === "attendant" && r[1] === "recent" && method === "GET") {
     await requireAttendant(ctx, c);
     const purchases = await c.purchases.find({}).sort({ createdAt: -1 }).limit(12).toArray();
-    const players = await c.players.find({ _id: { $in: [...new Set(purchases.map((p) => p.playerId))] } }).toArray();
+    const players = await c.players.find({ _id: { $in: [...new Set(purchases.map((p) => p.playerId).filter((id): id is string => id != null))] } }).toArray();
     const pmap = new Map(players.map((p) => [p._id, p]));
-    return { purchases: purchases.map((p) => ({ ...sPurchase(p), player: { firstName: firstNameOf(pmap.get(p.playerId)?.name ?? null), phone: pmap.get(p.playerId)?.phone ?? "" } })) };
+    return { purchases: purchases.map((p) => ({ ...sPurchase(p), player: p.playerId == null ? null : { firstName: firstNameOf(pmap.get(p.playerId)?.name ?? null), phone: pmap.get(p.playerId)?.phone ?? "" } })) };
   }
 
   // member history for the attendant desk (purchases, balance = total spent, rewards)
@@ -592,10 +602,15 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     // Trend buckets keyed by venue-local day; today's chart also uses venue-local hours.
     const bmap = new Map<string, { rev: number; games: number; items: number; itemRev: number; coveredRev: number; itemCost: number; coveredLines: number }>();
     const hourlyTotals = period === "today" ? Array<number>(24).fill(0) : [];
+    let unknownHourKobo = 0;
     for (const p of purchases) {
       const localTime = venueNow(tz, p.createdAt);
       const d = localTime.date;
-      if (period === "today") hourlyTotals[Math.floor(localTime.minutes / 60)] += p.amountKobo;
+      if (period === "today") {
+        const hour = saleHour(tz, p);
+        if (hour == null) unknownHourKobo += p.amountKobo;
+        else hourlyTotals[hour] += p.amountKobo;
+      }
       const b = bmap.get(d) ?? { rev: 0, games: 0, items: 0, itemRev: 0, coveredRev: 0, itemCost: 0, coveredLines: 0 };
       b.rev += p.amountKobo;
       if (p.kind === "game") b.games += 1;
@@ -657,23 +672,22 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     const { itemRevenueKobo: itemsKobo, coveredRevenueKobo: coveredItemRevenueKobo, costKobo: itemCostKobo,
       grossProfitKobo: itemGrossProfitKobo, costedItemLines, itemLines } = summarizeItemSales(purchases);
 
-    // attendant performance (orders ≈ distinct player+timestamp)
+    // attendant performance (new orders have IDs; older sales use player+timestamp)
     const aStats = new Map<string, { orders: Set<string>; rev: number }>();
     for (const p of purchases) {
-      const aid = p.attendantId ?? "—";
+      const aid = p.entrySource === "manual" ? "__manual__" : p.attendantId ?? "—";
       const s = aStats.get(aid) ?? { orders: new Set<string>(), rev: 0 };
-      s.orders.add(`${p.playerId}:${p.createdAt}`); s.rev += p.amountKobo; aStats.set(aid, s);
+      s.orders.add(p.orderId ?? `${p.playerId}:${p.createdAt}`); s.rev += p.amountKobo; aStats.set(aid, s);
     }
-    const atts = await c.attendants.find({ _id: { $in: [...aStats.keys()].filter((k) => k !== "—") } }).toArray();
+    const atts = await c.attendants.find({ _id: { $in: [...aStats.keys()].filter((k) => k !== "—" && k !== "__manual__") } }).toArray();
     const amap = new Map(atts.map((a) => [a._id, a.name]));
-    const attendants = [...aStats.entries()].map(([aid, s]) => ({ name: aid === "—" ? "Unassigned" : amap.get(aid) ?? "Removed", orders: s.orders.size, revenueKobo: s.rev, revenueLabel: money(s.rev, "NGN") })).sort((a, b) => b.revenueKobo - a.revenueKobo);
+    const attendants = [...aStats.entries()].map(([aid, s]) => ({ name: aid === "__manual__" ? "Manual entries" : aid === "—" ? "Unassigned" : amap.get(aid) ?? "Removed", orders: s.orders.size, revenueKobo: s.rev, revenueLabel: money(s.rev, "NGN") })).sort((a, b) => b.revenueKobo - a.revenueKobo);
 
     // customer insights
-    const playerIds = [...new Set(purchases.map((p) => p.playerId))];
+    const spend = memberSpendById(purchases);
+    const playerIds = [...spend.keys()];
     const players = await c.players.find({ _id: { $in: playerIds } }).toArray();
     const pmap = new Map(players.map((pl) => [pl._id, pl]));
-    const spend = new Map<string, number>();
-    for (const p of purchases) spend.set(p.playerId, (spend.get(p.playerId) ?? 0) + p.amountKobo);
     let newCount = 0, returningCount = 0;
     for (const pid of playerIds) {
       const pl = pmap.get(pid);
@@ -684,7 +698,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     return {
       period, days,
       totalRevenueLabel: money(gamesKobo + itemsKobo, "NGN"),
-      trends, hourlyRevenue, topGames, topItems, itemProfit,
+      trends, hourlyRevenue, unknownHourKobo, unknownHourLabel: ngn(unknownHourKobo), topGames, topItems, itemProfit,
       itemFinancials: {
         itemRevenueKobo: itemsKobo, itemRevenueLabel: money(itemsKobo, "NGN"),
         coveredRevenueKobo: coveredItemRevenueKobo, coveredRevenueLabel: money(coveredItemRevenueKobo, "NGN"),
@@ -893,24 +907,96 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     };
   }
 
-  // logs
+  // Sales entered after the fact use the sale's venue-local time for reporting,
+  // but retain a separate audit timestamp and operator. They never start timers.
+  if (r[1] === "sales" && r[2] === "options" && method === "GET") {
+    await requireAdmin(ctx, c, "manager");
+    const [games, items, h] = await Promise.all([c.games.find({}).toArray(), c.items.find({}).toArray(), attHours(c)]);
+    const now = venueNow(h.tz);
+    return {
+      timezone: h.tz, date: now.date, time: `${String(Math.floor(now.minutes / 60)).padStart(2, "0")}:${String(now.minutes % 60).padStart(2, "0")}`,
+      games: games.map((g) => ({ id: g._id, name: g.name, priceKobo: g.priceKobo, active: g.status === "active" })),
+      items: items.map((i) => ({ id: i._id, name: i.name, priceKobo: i.priceKobo, costPriceKobo: i.costPriceKobo ?? null, stock: i.stock ?? null, active: i.active })),
+    };
+  }
+  if (r[1] === "sales" && !r[2] && method === "POST") {
+    const me = await requireAdmin(ctx, c, "manager");
+    const h = await attHours(c);
+    const occurredDate = String(b.occurredDate ?? "");
+    const occurredTime = String(b.occurredTime ?? "").trim();
+    const occurredAt = occurredTime ? venueDateTimeEpoch(h.tz, occurredDate, occurredTime) : venueDateOnlyEpoch(h.tz, occurredDate);
+    const now = Date.now();
+    if (occurredAt == null) throw new HttpError(400, "validation_error", "Enter a valid sale date and, if known, time in the venue timezone.");
+    if (occurredAt > now) throw new HttpError(400, "validation_error", "A missed sale cannot be dated in the future.");
+    const phone = normPhone(b.phone);
+    if (phone.length > 0 && phone.length < 6) throw new HttpError(400, "validation_error", "Enter a valid phone number or leave it blank for a walk-in sale.");
+    if (b.kind !== "game" && b.kind !== "item") throw new HttpError(400, "validation_error", "Choose a game or item.");
+    const kind = b.kind;
+    const quantity = Number(b.quantity);
+    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000) throw new HttpError(400, "validation_error", "Quantity must be between 1 and 1000.");
+    const amountKobo = itemPrice(b.amountKobo, "Sale amount");
+    const note = String(b.note ?? "").trim();
+    if (note.length > 500) throw new HttpError(400, "validation_error", "Note must be 500 characters or fewer.");
+    const refId = String(b.refId ?? "");
+    const product = kind === "game" ? await c.games.findOne({ _id: refId }) : await c.items.findOne({ _id: refId });
+    if (!product) throw new HttpError(404, "not_found", "Choose a game or item from the catalogue.");
+    const item = kind === "item" ? product as Item : null;
+    if (item && typeof b.adjustStock !== "boolean") throw new HttpError(400, "validation_error", "Choose whether to adjust current stock.");
+    const adjustStock = item != null && b.adjustStock === true && item.stock != null;
+    if (item && adjustStock && item.stock != null && item.stock < quantity) throw new HttpError(409, "insufficient_stock", "Current stock is lower than this quantity. Turn off stock adjustment if it was already reconciled.");
+    const unitCostKobo = item && b.unitCostKobo !== "" && b.unitCostKobo != null ? itemPrice(b.unitCostKobo, "Unit cost") : null;
+    if (unitCostKobo != null && !Number.isSafeInteger(unitCostKobo * quantity)) throw new HttpError(400, "validation_error", "Total item cost is too large.");
+    const name = String(b.name ?? "").trim();
+    let player: Player | null = null;
+    if (phone) {
+      player = await c.players.findOne({ phone });
+      if (!player) {
+        player = { _id: newId("ply"), phone, name: name || null, createdAt: now };
+        await c.players.insertOne(player);
+      }
+    }
+    const purchase: Purchase = {
+      _id: newId("pur"), playerId: player?._id ?? null, kind, refId: product._id, name: product.name, icon: product.icon,
+      amountKobo, quantity, attendantId: null, createdAt: occurredAt,
+      entrySource: "manual", recordedAt: now, recordedById: me._id, recordedByName: me.name, entryNote: note || null,
+      occurredDate, occurredTime: occurredTime || null, entryTimezone: h.tz, stockAdjusted: adjustStock,
+      headsUpEndsAt: null, mainEndsAt: kind === "game" ? occurredAt : null, location: kind === "game" ? (product as Game).location : null,
+      ...(item ? snapshotItemCost(unitCostKobo, quantity) : {}),
+    };
+    if (adjustStock) {
+      const updated = await c.items.updateOne({ _id: product._id, stock: { $gte: quantity } }, { $inc: { stock: -quantity } });
+      if (updated.modifiedCount !== 1) throw new HttpError(409, "insufficient_stock", "Current stock is lower than this quantity. Turn off stock adjustment if it was already reconciled.");
+    }
+    try {
+      await c.purchases.insertOne(purchase);
+    } catch (error) {
+      if (adjustStock) await c.items.updateOne({ _id: product._id }, { $inc: { stock: quantity } });
+      throw error;
+    }
+    return { sale: sPurchase(purchase) };
+  }
+
   // sales — recent purchases that managers/admin can view and correct (attendant mistakes)
   if (r[1] === "sales" && !r[2] && method === "GET") {
     await requireAdmin(ctx, c);
     const { page, size, skip } = pageParams(query, 20);
+    const manualOnly = query.get("source") === "manual";
+    const filter = manualOnly ? { entrySource: "manual" as const } : {};
     const [purchases, total] = await Promise.all([
-      c.purchases.find({}).sort({ createdAt: -1 }).skip(skip).limit(size).toArray(),
-      c.purchases.countDocuments({}),
+      c.purchases.find(filter).sort(manualOnly ? { recordedAt: -1 } : { createdAt: -1 }).skip(skip).limit(size).toArray(),
+      c.purchases.countDocuments(filter),
     ]);
-    const ids = [...new Set(purchases.map((p) => p.playerId))];
+    const ids = [...new Set(purchases.map((p) => p.playerId).filter((id): id is string => id != null))];
     const players = await c.players.find({ _id: { $in: ids } }).toArray();
     const pmap = new Map(players.map((pl) => [pl._id, pl]));
     return {
       sales: purchases.map((p) => {
-        const pl = pmap.get(p.playerId);
+        const pl = p.playerId == null ? null : pmap.get(p.playerId);
         return {
-          id: p._id, kind: p.kind, name: p.name, quantity: p.quantity, amountLabel: ngn(p.amountKobo),
+          id: p._id, kind: p.kind, name: p.name, quantity: p.quantity, amountLabel: ngn(p.amountKobo), walkIn: p.playerId == null,
           createdAt: iso(p.createdAt),
+          entrySource: p.entrySource ?? null, recordedAt: iso(p.recordedAt), recordedByName: p.recordedByName ?? null, entryNote: p.entryNote ?? null,
+          occurredDate: p.occurredDate ?? null, occurredTime: p.occurredTime ?? null, entryTimezone: p.entryTimezone ?? null,
           player: pl ? { firstName: firstNameOf(pl.name), phone: pl.phone } : null,
           edited: p.editedAt != null, editedByName: p.editedByName ?? null,
           originalQuantity: p.originalQuantity ?? null,
@@ -925,17 +1011,38 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     const me = await requireAdmin(ctx, c);
     const purchase = await c.purchases.findOne({ _id: r[2] });
     if (!purchase) throw new HttpError(404, "not_found", "Sale not found.");
-    const newQty = Math.max(1, Math.floor(Number(b.quantity ?? purchase.quantity)) || 1);
+    if (purchase.voidedAt != null) throw new HttpError(409, "sale_voided", "A voided sale cannot be edited.");
+    const newQty = Number(b.quantity ?? purchase.quantity);
+    if (!Number.isSafeInteger(newQty) || newQty < 1 || newQty > 1000) throw new HttpError(400, "validation_error", "Quantity must be between 1 and 1000.");
     if (newQty === purchase.quantity) return { ok: true, unchanged: true };
     const unit = Math.round(purchase.amountKobo / Math.max(1, purchase.quantity));
+    if (!Number.isSafeInteger(unit * newQty)) throw new HttpError(400, "validation_error", "Sale amount is too large.");
     const set: Record<string, unknown> = { quantity: newQty, amountKobo: unit * newQty, editedAt: Date.now(), editedByName: me.name };
+    let stockDelta = 0;
+    if (purchase.entrySource === "manual" && purchase.kind === "item" && purchase.stockAdjusted) {
+      const extraUnits = newQty - purchase.quantity;
+      if (extraUnits > 0) {
+        const updated = await c.items.updateOne({ _id: purchase.refId, stock: { $gte: extraUnits } }, { $inc: { stock: -extraUnits } });
+        if (updated.modifiedCount !== 1) throw new HttpError(409, "insufficient_stock", "Current stock is too low for this correction.");
+      } else {
+        const updated = await c.items.updateOne({ _id: purchase.refId, stock: { $ne: null } }, { $inc: { stock: -extraUnits } });
+        if (updated.modifiedCount !== 1) throw new HttpError(409, "stock_unavailable", "Tracked stock is unavailable for this correction.");
+      }
+      stockDelta = -extraUnits;
+    }
     if (purchase.kind === "item" && purchase.unitCostKobo != null) set.costAmountKobo = snapshotItemCost(purchase.unitCostKobo, newQty).costAmountKobo;
     if (purchase.originalQuantity == null) { set.originalQuantity = purchase.quantity; set.originalAmountKobo = purchase.amountKobo; }
     if (purchase.kind === "game" && purchase.headsUpEndsAt != null && purchase.mainEndsAt != null) {
       const perUnit = (purchase.mainEndsAt - purchase.headsUpEndsAt) / Math.max(1, purchase.quantity);
       set.mainEndsAt = Math.round(purchase.headsUpEndsAt + perUnit * newQty);
     }
-    await c.purchases.updateOne({ _id: r[2] }, { $set: set });
+    try {
+      const changed = await c.purchases.updateOne({ _id: r[2], voidedAt: null, quantity: purchase.quantity }, { $set: set });
+      if (changed.modifiedCount !== 1) throw new HttpError(409, "sale_changed", "This sale changed while you were editing it. Reload and try again.");
+    } catch (error) {
+      if (stockDelta !== 0) await c.items.updateOne({ _id: purchase.refId, stock: { $ne: null } }, { $inc: { stock: -stockDelta } });
+      throw error;
+    }
     return { ok: true };
   }
   // void a sale (manager/admin) — kept for audit, removed from revenue & spend
@@ -946,12 +1053,30 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     if (purchase.voidedAt) return { ok: true, alreadyVoided: true };
     const set: Record<string, unknown> = { voidedAt: Date.now(), voidedByName: me.name };
     if (purchase.kind === "game" && purchase.mainEndsAt && purchase.mainEndsAt > Date.now()) set.mainEndsAt = Date.now(); // stop a live timer
-    await c.purchases.updateOne({ _id: r[2] }, { $set: set });
-    const spent = await spentOf(c, purchase.playerId);
-    const reds = await c.redemptions.find({ playerId: purchase.playerId }).toArray();
-    const rwds = reds.length ? await c.rewards.find({ _id: { $in: reds.map((x) => x.rewardId) } }).toArray() : [];
-    const shortfall = rwds.filter((rw) => spent < rw.spendRequiredKobo).map((rw) => rw.name);
-    return { ok: true, warning: shortfall.length ? `Heads up: this member is now below the threshold for already-claimed reward(s): ${shortfall.join(", ")}.` : null };
+    const changed = await c.purchases.updateOne({ _id: r[2], voidedAt: null, quantity: purchase.quantity }, { $set: set });
+    if (changed.modifiedCount !== 1) {
+      const latest = await c.purchases.findOne({ _id: r[2] });
+      if (latest?.voidedAt != null) return { ok: true, alreadyVoided: true };
+      throw new HttpError(409, "sale_changed", "This sale changed. Reload and try again.");
+    }
+    let stockWarning: string | null = null;
+    if (purchase.entrySource === "manual" && purchase.kind === "item" && purchase.stockAdjusted) {
+      try {
+        const restored = await c.items.updateOne({ _id: purchase.refId, stock: { $ne: null } }, { $inc: { stock: purchase.quantity } });
+        if (restored.modifiedCount !== 1) stockWarning = "The sale was voided, but tracked stock could not be restored. Check inventory.";
+      } catch {
+        stockWarning = "The sale was voided, but tracked stock could not be restored. Check inventory.";
+      }
+    }
+    let rewardWarning: string | null = null;
+    if (purchase.playerId != null) {
+      const spent = await spentOf(c, purchase.playerId);
+      const reds = await c.redemptions.find({ playerId: purchase.playerId }).toArray();
+      const rwds = reds.length ? await c.rewards.find({ _id: { $in: reds.map((x) => x.rewardId) } }).toArray() : [];
+      const shortfall = rwds.filter((rw) => spent < rw.spendRequiredKobo).map((rw) => rw.name);
+      rewardWarning = shortfall.length ? `Heads up: this member is now below the threshold for already-claimed reward(s): ${shortfall.join(", ")}.` : null;
+    }
+    return { ok: true, warning: [stockWarning, rewardWarning].filter(Boolean).join(" ") || null };
   }
 
   if (r[1] === "logs" && method === "GET") {
@@ -964,7 +1089,7 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
       c.purchases.countDocuments(filter),
     ]);
     const [players, attendants] = await Promise.all([
-      c.players.find({ _id: { $in: [...new Set(purchases.map((p) => p.playerId))] } }).toArray(),
+      c.players.find({ _id: { $in: [...new Set(purchases.map((p) => p.playerId).filter((id): id is string => id != null))] } }).toArray(),
       c.attendants.find({ _id: { $in: [...new Set(purchases.map((p) => p.attendantId).filter(Boolean) as string[])] } }).toArray(),
     ]);
     const pmap = new Map(players.map((p) => [p._id, p]));
@@ -972,8 +1097,12 @@ async function adminApi(c: Cols, r: string[], method: string, b: Body, query: UR
     return {
       logs: purchases.map((p) => ({
         ...sPurchase(p),
-        player: { id: p.playerId, firstName: firstNameOf(pmap.get(p.playerId)?.name ?? null), phone: pmap.get(p.playerId)?.phone ?? "" },
+        player: p.playerId == null ? null : { id: p.playerId, firstName: firstNameOf(pmap.get(p.playerId)?.name ?? null), phone: pmap.get(p.playerId)?.phone ?? "" },
         attendant: (p.attendantId && amap.get(p.attendantId)) || "—",
+        edited: p.editedAt != null, editedAt: iso(p.editedAt), editedByName: p.editedByName ?? null,
+        originalQuantity: p.originalQuantity ?? null,
+        originalAmountLabel: p.originalAmountKobo != null ? ngn(p.originalAmountKobo) : null,
+        voidedAt: iso(p.voidedAt), voidedByName: p.voidedByName ?? null,
       })),
       total, page, pages: pagesOf(total, size),
     };

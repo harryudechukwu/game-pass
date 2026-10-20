@@ -33,6 +33,11 @@ export function timeAgo(date: string | Date): string {
   return d.toLocaleDateString();
 }
 
+export function saleTimeLabel(sale: { createdAt: string; entrySource?: string | null; occurredDate?: string | null; occurredTime?: string | null }): string {
+  if (sale.entrySource === "manual" && sale.occurredDate && !sale.occurredTime) return `${sale.occurredDate} · time not recorded`;
+  return timeAgo(sale.createdAt);
+}
+
 export function dayLabel(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
   const today = new Date();

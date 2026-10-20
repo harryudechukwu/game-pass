@@ -6,7 +6,7 @@ import { ArrowLeft, Wallet, Gift, IconContext } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading, ErrorNote } from "@/components/ui";
 
-type Purchase = { id: string; name: string; amountLabel: string; quantity: number; createdAt: string; kind: string };
+type Purchase = { id: string; name: string; amountLabel: string; quantity: number; createdAt: string; kind: string; entrySource: "manual" | null };
 type RewardRow = { id: string; name: string; spendRequiredLabel: string; unlocked: boolean; redeemed: boolean; status: string };
 type Data = {
   member: { firstName: string | null; name: string | null; phone: string; spentLabel: string; gamesPlayed: number };
@@ -65,7 +65,7 @@ export default function MemberHistoryPage() {
               <div className="divide-y divide-white/5">
                 {data.purchases.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 py-2 text-sm">
-                    <span className="truncate">{p.name}{p.quantity > 1 ? ` ×${p.quantity}` : ""}</span>
+                    <span className="truncate">{p.name}{p.quantity > 1 ? ` ×${p.quantity}` : ""}{p.entrySource === "manual" && <span className="ml-2 text-xs font-semibold text-[#0d47a1]">Manual entry</span>}</span>
                     <span className="shrink-0 text-white/60">{p.amountLabel}</span>
                   </div>
                 ))}

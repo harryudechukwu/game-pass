@@ -13,6 +13,8 @@ type Analytics = {
   totalRevenueLabel: string;
   trends: { date: string; revenueKobo: number; revenueLabel: string; games: number; items: number; itemRevenueKobo: number; itemRevenueLabel: string; itemProfitKobo: number | null; itemProfitLabel: string | null; itemCoveragePct: number | null }[];
   hourlyRevenue: { hour: number; revenueKobo: number; revenueLabel: string }[];
+  unknownHourKobo: number;
+  unknownHourLabel: string;
   topGames: (NameRev & { plays: number })[];
   topItems: (NameRev & { qty: number })[];
   itemProfit: (NameRev & { id: string; qty: number; coveredRevenueKobo: number; costKobo: number; costLabel: string | null; profitKobo: number | null; profitLabel: string | null; coveragePct: number | null })[];
@@ -43,6 +45,7 @@ function buildSummary(d: Analytics, periodLabel: string): string[] {
   if (d.itemFinancials.costedItemLines > 0) lines.push(`Recorded item gross profit was ${d.itemFinancials.grossProfitLabel} on sales with known cost; those sales account for ${d.itemFinancials.coveragePct ?? 0}% of item revenue.`);
   else if (d.itemFinancials.itemLines > 0) lines.push("Item gross profit is unavailable because these sales have no recorded cost price.");
   if (busiest && busiest.revenueKobo > 0) lines.push(`The busiest day was ${fmtDay(busiest.date)}, taking ${busiest.revenueLabel}.`);
+  if (d.period === "today" && d.unknownHourKobo > 0) lines.push(`${d.unknownHourLabel} came from manual sales whose time was not recorded; those sales are included in today's total but not assigned to an hour.`);
   lines.push(`${d.newCount} new member${d.newCount === 1 ? "" : "s"} joined this window and ${d.returningCount} returned.`);
   if (d.topSpenders[0]) lines.push(`The top spender was ${d.topSpenders[0].name} (${d.topSpenders[0].revenueLabel}).`);
   return lines;
@@ -63,11 +66,12 @@ function RankBars({ rows, max }: { rows: { name: string; value: number; label: s
   );
 }
 
-function RevenueTrend({ trends, hourlyRevenue, period }: { trends: Analytics["trends"]; hourlyRevenue: Analytics["hourlyRevenue"]; period: string }) {
+function RevenueTrend({ trends, hourlyRevenue, unknownHourKobo, unknownHourLabel, period }: { trends: Analytics["trends"]; hourlyRevenue: Analytics["hourlyRevenue"]; unknownHourKobo: number; unknownHourLabel: string; period: string }) {
   const isHourly = period === "today";
   const points = isHourly
-    ? hourlyRevenue.map((h) => ({ key: String(h.hour), label: fmtHour(h.hour), revenueKobo: h.revenueKobo, revenueLabel: h.revenueLabel }))
-    : trends.map((t) => ({ key: t.date, label: fmtDay(t.date), revenueKobo: t.revenueKobo, revenueLabel: t.revenueLabel }));
+    ? [...hourlyRevenue.map((h) => ({ key: String(h.hour), label: fmtHour(h.hour), revenueKobo: h.revenueKobo, revenueLabel: h.revenueLabel, unknown: false })),
+      ...(unknownHourKobo > 0 ? [{ key: "unknown", label: "No time", revenueKobo: unknownHourKobo, revenueLabel: unknownHourLabel, unknown: true }] : [])]
+    : trends.map((t) => ({ key: t.date, label: fmtDay(t.date), revenueKobo: t.revenueKobo, revenueLabel: t.revenueLabel, unknown: false }));
   const maxRevenue = points.reduce((max, p) => Math.max(max, p.revenueKobo), 0);
   if (maxRevenue === 0) return <div className="flex h-44 items-center justify-center text-sm text-[#7185a0]">No revenue in this period.</div>;
 
@@ -84,10 +88,10 @@ function RevenueTrend({ trends, hourlyRevenue, period }: { trends: Analytics["tr
   }));
   const peakIndex = points.findIndex((p) => p.revenueKobo === maxRevenue);
   const tickCount = Math.min(5, bars.length);
-  const labelTicks = new Set(isHourly ? [0, 6, 12, 18, 23] : Array.from({ length: tickCount }, (_, i) => Math.round((i * (bars.length - 1)) / Math.max(1, tickCount - 1))));
+  const labelTicks = new Set(isHourly ? [0, 6, 12, 18, unknownHourKobo > 0 ? 24 : 23] : Array.from({ length: tickCount }, (_, i) => Math.round((i * (bars.length - 1)) / Math.max(1, tickCount - 1))));
 
   return (
-    <svg viewBox="0 0 600 235" className="block w-full" role="img" aria-label={isHourly ? "Hourly revenue for today" : `Daily revenue trend from ${trends[0].date} to ${trends[trends.length - 1].date}`}>
+    <svg viewBox="0 0 600 235" className="block w-full" role="img" aria-label={isHourly ? "Hourly revenue for today, including sales without a recorded time" : `Daily revenue trend from ${trends[0].date} to ${trends[trends.length - 1].date}`}>
       <defs>
         <linearGradient id="revenue-bar-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#4288f2" />
@@ -106,7 +110,7 @@ function RevenueTrend({ trends, hourlyRevenue, period }: { trends: Analytics["tr
       {bars.map((bar, i) => (
         <g key={bar.key}>
           <title>{`${bar.label} · ${bar.revenueLabel}`}</title>
-          {bar.revenueKobo > 0 && <rect x={bar.x - barWidth / 2} y={bar.y} width={barWidth} height={bottom - bar.y} rx={Math.min(7, barWidth / 2)} fill="url(#revenue-bar-fill)" />}
+          {bar.revenueKobo > 0 && <rect x={bar.x - barWidth / 2} y={bar.y} width={barWidth} height={bottom - bar.y} rx={Math.min(7, barWidth / 2)} fill={bar.unknown ? "#f4b544" : "url(#revenue-bar-fill)"} />}
           {(bars.length <= 6 || (isHourly && i === peakIndex)) && <text x={bar.x} y={bar.revenueKobo > 0 ? bar.y - 10 : bottom - 10} textAnchor="middle" fill="#174b97" fontSize="15" fontWeight="700">{compactMoney(bar.revenueKobo)}</text>}
           {labelTicks.has(i) && <text x={bar.x} y="222" textAnchor="middle" fill="#7185a0" fontSize="14">{bar.label}</text>}
         </g>
@@ -180,7 +184,8 @@ export default function AnalyticsPage() {
               <h2 className="font-bold">{data.period === "today" ? "Revenue by hour" : "Revenue trend"}</h2>
               <span className="text-sm text-white/50">Total <b className="text-[#0d47a1]">{data.totalRevenueLabel}</b></span>
             </div>
-            <RevenueTrend trends={data.trends} hourlyRevenue={data.hourlyRevenue} period={data.period} />
+            <RevenueTrend trends={data.trends} hourlyRevenue={data.hourlyRevenue} unknownHourKobo={data.unknownHourKobo} unknownHourLabel={data.unknownHourLabel} period={data.period} />
+            {data.period === "today" && data.unknownHourKobo > 0 && <p className="mt-2 text-xs text-white/55">No time: {data.unknownHourLabel} from manual sales without a recorded hour.</p>}
           </div>
 
           <div className="card p-5">

@@ -5,10 +5,10 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Wallet, Gift, Ticket } from "@phosphor-icons/react";
 import { api } from "@/lib/client";
-import { timeAgo, clockTime } from "@/lib/format";
+import { saleTimeLabel, timeAgo, clockTime } from "@/lib/format";
 import { Loading } from "@/components/ui";
 
-type Purchase = { id: string; kind: "game" | "item"; name: string; icon: string; amountLabel: string; quantity: number; createdAt: string; sessionStatus: string | null };
+type Purchase = { id: string; kind: "game" | "item"; name: string; icon: string; amountLabel: string; quantity: number; createdAt: string; sessionStatus: string | null; entrySource: "manual" | null; occurredDate: string | null; occurredTime: string | null };
 type Detail = {
   player: { id: string; name: string | null; phone: string; spentLabel: string; gamesPlayed: number; createdAt: string };
   purchases: Purchase[];
@@ -53,7 +53,8 @@ export default function PlayerDetailPage() {
               <div key={x.id} className="flex items-center gap-3 border-b border-white/5 py-2 text-sm last:border-0">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{x.name}{x.kind === "item" && x.quantity > 1 ? ` ×${x.quantity}` : ""}</p>
-                  <p className="text-xs text-white/40">{x.kind} · {timeAgo(x.createdAt)}</p>
+                  <p className="text-xs text-white/40">{x.kind} · {saleTimeLabel(x)}</p>
+                  {x.entrySource === "manual" && <p className="text-xs font-semibold text-[#0d47a1]">Manual entry</p>}
                 </div>
                 <span className="font-bold text-white/80">{x.amountLabel}</span>
               </div>

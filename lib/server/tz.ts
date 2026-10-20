@@ -46,6 +46,42 @@ export function venueDayRange(tz: string, date: string): [number, number] {
   return [start, end];
 }
 
+// A date-only sale needs an epoch for day-based queries, but its hour remains
+// unknown. Use the start of the venue day solely as that indexing timestamp.
+export function venueDateOnlyEpoch(tz: string, date: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const [year, month, day] = date.split("-").map(Number);
+  const dayUtc = Date.UTC(year, month - 1, day);
+  if (!Number.isFinite(dayUtc) || new Date(dayUtc).toISOString().slice(0, 10) !== date) return null;
+  const [start, end] = venueDayRange(tz, date);
+  return start < end && venueNow(tz, start).date === date ? start : null;
+}
+
+export function saleHour(tz: string, sale: { createdAt: number; entrySource?: string | null; occurredTime?: string | null }): number | null {
+  if (sale.entrySource === "manual" && sale.occurredTime == null) return null;
+  return Math.floor(venueNow(tz, sale.createdAt).minutes / 60);
+}
+
+// Convert an operator-entered venue-local date and time to an epoch. Reject
+// impossible dates and DST-skipped wall times instead of silently moving a sale.
+export function venueDateTimeEpoch(tz: string, date: string, time: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
+  const [year, month, day] = date.split("-").map(Number);
+  const dayUtc = Date.UTC(year, month - 1, day);
+  if (!Number.isFinite(dayUtc) || new Date(dayUtc).toISOString().slice(0, 10) !== date) return null;
+  const [hour, minute] = time.split(":").map(Number);
+  const targetMinutes = hour * 60 + minute;
+  const [start] = venueDayRange(tz, date);
+  let at = start + targetMinutes * 60000;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const local = venueNow(tz, at);
+    if (local.date === date && local.minutes === targetMinutes) return at;
+    const localDayUtc = Date.parse(`${local.date}T00:00:00Z`);
+    at += ((dayUtc - localDayUtc) / 60000 + targetMinutes - local.minutes) * 60000;
+  }
+  return null;
+}
+
 // Epoch for a minutes-of-day on the venue day that `at` falls in.
 export function venueTimeEpoch(tz: string, minutes: number, at: number = Date.now()): number {
   const { date } = venueNow(tz, at);

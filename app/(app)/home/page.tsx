@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
-import { timeAgo } from "@/lib/format";
+import { saleTimeLabel } from "@/lib/format";
 import { useCustomer } from "@/components/customer/CustomerProvider";
 import { SessionTimer } from "@/components/customer/SessionTimer";
 import { Icon } from "@/components/Icon";
@@ -16,6 +16,9 @@ type Purchase = {
   amountLabel: string;
   quantity: number;
   createdAt: string;
+  entrySource: "manual" | null;
+  occurredDate: string | null;
+  occurredTime: string | null;
   location: string | null;
   headsUpEndsAt: string | null;
   mainEndsAt: string | null;
@@ -123,7 +126,7 @@ export default function HomePage() {
                 <div className="gp-tile"><img src={p.kind === "game" ? "/img/game.svg" : "/img/activity.svg"} alt="" /></div>
                 <div className="gp-item-main">
                   <div className="gp-item-name">{p.name}{p.kind === "item" && p.quantity > 1 ? ` ×${p.quantity}` : ""}</div>
-                  <div className="gp-item-sub">{timeAgo(p.createdAt)}</div>
+                  <div className="gp-item-sub">{saleTimeLabel(p)}{p.entrySource === "manual" ? " · Manual entry" : ""}</div>
                 </div>
                 <span className="gp-item-amt">{p.amountLabel}</span>
               </div>

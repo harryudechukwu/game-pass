@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "@/lib/client";
-import { timeAgo } from "@/lib/format";
+import { saleTimeLabel } from "@/lib/format";
 import { Icon } from "@/components/Icon";
 
-type Purchase = { id: string; kind: "game" | "item"; name: string; amountLabel: string; quantity: number; createdAt: string };
+type Purchase = { id: string; kind: "game" | "item"; name: string; amountLabel: string; quantity: number; createdAt: string; entrySource: "manual" | null; occurredDate: string | null; occurredTime: string | null };
 type Resp = { purchases: Purchase[]; total: number; page: number; pages: number };
 
 export default function PurchasesPage() {
@@ -38,7 +38,7 @@ export default function PurchasesPage() {
             <div className="gp-tile"><img src={p.kind === "game" ? "/img/game.svg" : "/img/activity.svg"} alt="" /></div>
             <div className="gp-item-main">
               <div className="gp-item-name">{p.name}{p.kind === "item" && p.quantity > 1 ? ` ×${p.quantity}` : ""}</div>
-              <div className="gp-item-sub">{timeAgo(p.createdAt)}</div>
+              <div className="gp-item-sub">{saleTimeLabel(p)}{p.entrySource === "manual" ? " · Manual entry" : ""}</div>
             </div>
             <span className="gp-item-amt">{p.amountLabel}</span>
           </div>

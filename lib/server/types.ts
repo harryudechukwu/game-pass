@@ -39,7 +39,8 @@ export type Item = {
 
 export type Purchase = {
   _id: string;
-  playerId: string;
+  playerId: string | null; // null for a walk-in sale without a phone number
+  orderId?: string; // shared by lines in one attendant order
   kind: "game" | "item";
   refId: string;
   name: string;
@@ -50,6 +51,17 @@ export type Purchase = {
   quantity: number;
   attendantId: string | null;
   createdAt: number;
+  // Missed sales entered later by an admin/manager. createdAt is when the sale
+  // happened; recordedAt is when the operator added it to the system.
+  entrySource?: "manual";
+  recordedAt?: number;
+  recordedById?: string;
+  recordedByName?: string;
+  entryNote?: string | null;
+  occurredDate?: string;
+  occurredTime?: string | null; // null means the operator knew only the date
+  entryTimezone?: string;
+  stockAdjusted?: boolean;
   headsUpEndsAt: number | null;
   mainEndsAt: number | null;
   location: string | null;

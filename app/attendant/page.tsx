@@ -16,7 +16,7 @@ type OrderLine = { kind: string; name: string; quantity: number; amountLabel: st
 type OrderResult = {
   purchases: OrderLine[];
   totalLabel: string;
-  player: { firstName: string | null; phone: string; spentLabel: string };
+  player: { firstName: string | null; phone: string; spentLabel: string } | null;
   isNewPlayer: boolean;
   headsUpSeconds: number;
   hasGame: boolean;
@@ -26,16 +26,17 @@ type RedeemResult = { code: string; reward: { name: string }; player: { firstNam
 type CartLine = { key: string; kind: "game" | "item"; ref: Cat; qty: number };
 
 const MAIN_TABS = [
-  { key: "games", label: "Games", icon: Gamepad2 },
   { key: "items", label: "Items", icon: ShoppingBag },
+  { key: "games", label: "Games", icon: Gamepad2 },
 ] as const;
 
 export default function AttendantPage() {
   const [games, setGames] = useState<Cat[]>([]);
   const [items, setItems] = useState<Cat[]>([]);
   const [headsUp, setHeadsUp] = useState(60);
-  const [mainTab, setMainTab] = useState<"games" | "items">("games");
+  const [mainTab, setMainTab] = useState<"games" | "items">("items");
   const [phone, setPhone] = useState("");
+  const [walkIn, setWalkIn] = useState(false);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [busy, setBusy] = useState(false);
@@ -74,8 +75,9 @@ export default function AttendantPage() {
     try {
       const raw = localStorage.getItem("cc_att_draft");
       if (raw) {
-        const d = JSON.parse(raw) as { phone?: string; cart?: CartLine[] };
+        const d = JSON.parse(raw) as { phone?: string; walkIn?: boolean; cart?: CartLine[] };
         if (typeof d.phone === "string") setPhone(d.phone);
+        if (d.walkIn === true) setWalkIn(true);
         if (Array.isArray(d.cart)) setCart(d.cart);
       }
     } catch { /* ignore an unreadable draft */ }
@@ -84,10 +86,10 @@ export default function AttendantPage() {
   useEffect(() => {
     if (!draftRef.current) return; // don't write until the initial restore has run
     try {
-      if (!phone && cart.length === 0) localStorage.removeItem("cc_att_draft");
-      else localStorage.setItem("cc_att_draft", JSON.stringify({ phone, cart }));
+      if (!phone && !walkIn && cart.length === 0) localStorage.removeItem("cc_att_draft");
+      else localStorage.setItem("cc_att_draft", JSON.stringify({ phone, walkIn, cart }));
     } catch { /* storage unavailable */ }
-  }, [phone, cart]);
+  }, [phone, walkIn, cart]);
 
   function logout() {
     void api("/api/attendant/logout", { method: "POST" }).catch(() => {});
@@ -95,10 +97,10 @@ export default function AttendantPage() {
   }
 
   useEffect(() => {
-    if (phone.replace(/\s+/g, "").length < 6) { setLookup(null); return; }
+    if (walkIn || phone.replace(/\s+/g, "").length < 6) { setLookup(null); return; }
     const t = setTimeout(() => { api<Lookup>(`/api/attendant/lookup?phone=${encodeURIComponent(phone)}`).then(setLookup).catch(() => setLookup(null)); }, 300);
     return () => clearTimeout(t);
-  }, [phone]);
+  }, [phone, walkIn]);
 
   const list = mainTab === "items"
     ? items.filter((i) => i.name.toLowerCase().includes(itemQuery.trim().toLowerCase()))
@@ -129,7 +131,8 @@ export default function AttendantPage() {
       const res = await api<OrderResult>("/api/attendant/order", {
         method: "POST",
         body: {
-          phone,
+          phone: walkIn ? "" : phone,
+          walkIn,
           lines: cart.map((l) => ({ kind: l.kind, refId: l.ref.id, ...(l.kind === "game" ? { hours: l.qty } : { quantity: l.qty }) })),
         },
       });
@@ -144,7 +147,7 @@ export default function AttendantPage() {
   }
 
   function reset() {
-    setPhone(""); setLookup(null); setCart([]); setResult(null); setReview(false); setError("");
+    setPhone(""); setWalkIn(false); setLookup(null); setCart([]); setResult(null); setReview(false); setError("");
   }
 
   async function redeemReward() {
@@ -210,7 +213,7 @@ export default function AttendantPage() {
           <div className="card mx-auto max-w-lg border-2 border-emerald-400/30 p-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300"><Check size={34} /></div>
             <h1 className="text-2xl font-black">Order logged</h1>
-            <p className="mt-1 text-white/60">{result.purchases.length} item{result.purchases.length > 1 ? "s" : ""} for <b className="text-white">{result.player.firstName ?? result.player.phone}</b>{result.isNewPlayer && " (new member)"}.</p>
+            <p className="mt-1 text-white/60">{result.purchases.length} item{result.purchases.length > 1 ? "s" : ""} for <b className="text-white">{result.player ? result.player.firstName ?? result.player.phone : "Walk-in guest"}</b>{result.isNewPlayer && " (new member)"}.</p>
             <div className="mx-auto mt-4 max-w-sm space-y-1 rounded-xl border border-white/10 bg-white/5 p-3 text-left text-sm">
               {result.purchases.map((p, i) => (
                 <div key={i} className="flex items-center justify-between gap-2">
@@ -221,8 +224,9 @@ export default function AttendantPage() {
               <div className="mt-1 flex items-center justify-between border-t border-white/10 pt-2 font-bold"><span>Total</span><span className="text-[#0d47a1]">{result.totalLabel}</span></div>
             </div>
             {result.hasGame && (
-              <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-amber-400/10 px-4 py-2 text-sm text-amber-300"><Timer size={15} /> Game timers start after a {result.headsUpSeconds}s heads-up on their phone.</p>
+              <p className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full bg-amber-400/10 px-4 py-2 text-sm text-amber-300"><Timer size={15} /> Game timers start after a {result.headsUpSeconds}s heads-up. Track them in Time keeping.</p>
             )}
+            {!result.player && <p className="mt-3 text-sm text-white/55">This sale counts in revenue, but not toward member spend or rewards.</p>}
             {result.unlockedRewards.length > 0 && (
               <div className="mx-auto mt-4 max-w-sm rounded-xl border border-[#ffc800]/30 bg-[#ffc800]/10 p-3 text-sm text-[#ffc800]"><Gift size={14} className="mr-1 inline" /> Unlocked: {result.unlockedRewards.map((r) => r.name).join(", ")}</div>
             )}
@@ -235,8 +239,8 @@ export default function AttendantPage() {
             {error && <div className="mt-4"><ErrorNote message={error} /></div>}
             <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-white/50">Member</span>
-                <span className="font-semibold">{lookup?.player?.firstName ?? phone}{lookup && !lookup.found ? " · new guest" : ""}</span>
+                <span className="text-white/50">Customer</span>
+                <span className="font-semibold">{walkIn ? "Walk-in guest · no phone" : lookup?.player?.firstName ?? phone}{!walkIn && lookup && !lookup.found ? " · new member" : ""}</span>
               </div>
               <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
                 {cart.map((l) => (
@@ -251,8 +255,9 @@ export default function AttendantPage() {
               </div>
             </div>
             {cart.some((l) => l.kind === "game" && (l.ref.durationMinutes ?? 0) > 0) && (
-              <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300"><Timer size={13} className="mr-1 inline" /> Game timers start after a {headsUp}s heads-up on the member&apos;s phone.</p>
+              <p className="mt-3 rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300"><Timer size={13} className="mr-1 inline" /> Game timers start after a {headsUp}s heads-up. Track them in Time keeping.</p>
             )}
+            {walkIn && <p className="mt-3 text-xs text-white/55">This sale counts in revenue, but not toward member spend or rewards.</p>}
             <div className="mt-6 flex gap-3">
               <button className="btn-ghost flex-1" onClick={() => setReview(false)} disabled={busy}>Back to edit</button>
               <button className="btn-primary flex-1" onClick={submitOrder} disabled={busy}>{busy ? <Spinner /> : "Confirm & log"}</button>
@@ -290,12 +295,18 @@ export default function AttendantPage() {
             {/* Left: player + catalogue */}
             <div className="space-y-4">
               <div className="card p-5">
-                <h2 className="mb-3 font-bold">1 · Member phone number</h2>
-                <div className="relative">
+                <h2 className="mb-3 font-bold">1 · Customer</h2>
+                <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+                  <button type="button" aria-pressed={!walkIn} onClick={() => setWalkIn(false)} className={`rounded-lg border px-3 py-2.5 font-semibold ${!walkIn ? "border-[#2170ed] bg-[#5a95f2] text-white" : "border-[#dfe3e9] bg-white text-[#0d47a1]"}`}>With phone number</button>
+                  <button type="button" aria-pressed={walkIn} onClick={() => { setWalkIn(true); setPhone(""); setLookup(null); }} className={`rounded-lg border px-3 py-2.5 font-semibold ${walkIn ? "border-[#2170ed] bg-[#5a95f2] text-white" : "border-[#dfe3e9] bg-white text-[#0d47a1]"}`}>Walk-in · no phone</button>
+                </div>
+                {walkIn ? (
+                  <p className="rounded-lg bg-[#e3f3fd] px-3 py-2 text-sm text-[#0d47a1]">No phone needed. The sale will count in revenue, but won&apos;t earn member rewards.</p>
+                ) : <div className="relative">
                   <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
                   <input className="input pl-9 text-lg" inputMode="tel" placeholder="e.g. 08012345678" value={phone} onChange={(e) => setPhone(e.target.value)} autoFocus />
-                </div>
-                {lookup && (
+                </div>}
+                {!walkIn && lookup && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {lookup.found && lookup.player ? (
                       <>
@@ -369,9 +380,9 @@ export default function AttendantPage() {
                       <span className="text-2xl font-black text-[#0d47a1]">{money(total, "NGN")}</span>
                     </div>
                     {cart.some((l) => l.kind === "game" && (l.ref.durationMinutes ?? 0) > 0) && (
-                      <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Game timers start after a {headsUp}s heads-up on the member&apos;s phone.</p>
+                      <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Game timers start after a {headsUp}s heads-up. Track them in Time keeping.</p>
                     )}
-                    <button className="btn-primary w-full py-4" disabled={phone.replace(/\s+/g, "").length < 6} onClick={() => { setError(""); setReview(true); }}>
+                    <button className="btn-primary w-full py-4" disabled={!walkIn && phone.replace(/\s+/g, "").length < 6} onClick={() => { setError(""); setReview(true); }}>
                       Review order
                     </button>
                   </div>

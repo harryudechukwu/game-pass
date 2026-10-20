@@ -3,9 +3,10 @@
 A mobile-first app for a physical arcade. An **attendant** logs what a guest buys —
 either **game time** (₦1,000/hour, which starts a heads-up countdown then a play
 timer on the guest's phone) or an **item** sold in the playground. Everything a
-guest spends unlocks **rewards** at spend milestones. Guests sign in with **just a
-phone number** to watch their live game timer, see what they've spent, and redeem
-rewards.
+guest spends on their account unlocks **rewards** at spend milestones. Guests sign
+in with **just a phone number** to watch their live game timer, see what they've
+spent, and redeem rewards. Attendants can also log a walk-in sale without a
+phone number; that sale counts in revenue but is not credited to a member.
 
 > Buy a game or item → attendant logs it → your spend unlocks rewards.
 
@@ -27,6 +28,11 @@ rewards.
    finishes; the **spend counts immediately**.
 4. Items add to spend with no timer.
 
+For a customer who declines to share a phone number, the attendant selects
+**Walk-in · no phone** before reviewing the order. The game timer still appears
+in Time keeping at the desk, and the sale is included in revenue and item profit.
+It does not create a member account, increase member spend, or unlock rewards.
+
 ## Item gross profit
 
 Operators set an item's selling price and cost price on the Items page. New items
@@ -38,12 +44,25 @@ Sales made before cost tracking (or before an existing item's cost was set) rema
 in revenue but are excluded from gross profit. Voided sales are excluded from
 both. Gross profit does not include game costs or other business expenses.
 
+## Recording missed sales
+
+Admins and managers can use **Sales → Record missed sale** to add an item or game
+that an attendant did not log. Enter the date in the venue timezone, quantity,
+and selling price paid. The time and member phone are optional. Without a phone,
+the sale remains a walk-in and does not credit member spend or rewards. Without a
+time, it counts on the chosen date and appears under **No time** in today's
+hourly analytics rather than being assigned an invented hour. Manual
+entries carry a visible tag, operator name, entry timestamp, and optional note;
+they never start a live game timer. Item cost can be entered for accurate profit
+or left unknown. Tracked stock is adjusted only if the operator leaves that
+option on, so already-reconciled inventory is not deducted twice.
+
 ## Surfaces
 
 | Surface | URL | Who |
 |---|---|---|
 | **Player app** | `/home` | guests — phone-only sign-in; live timers, total spent, redeem rewards |
-| **Attendant** | `/attendant` | staff — look up a guest by phone; charge a game or sell an item |
+| **Attendant** | `/attendant` | staff — charge a game or sell an item with a phone number or as a walk-in guest |
 | **Operator** | `/admin` | operators — games, items, spend rewards, players, logs, heads-up setting |
 
 ## Run it locally
