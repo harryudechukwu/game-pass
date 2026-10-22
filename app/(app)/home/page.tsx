@@ -98,25 +98,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Upcoming rewards */}
-        <div className="gp-sec">
-          <div className="gp-sec-head"><span className="gp-sec-title">Upcoming rewards for you</span><Link href="/rewards" className="gp-seeall">See all</Link></div>
-          {data && data.upcomingRewards.length > 0 ? (
-            data.upcomingRewards.map((r) => (
-              <Link key={r.id} href={`/rewards/${r.id}`} className="gp-item" style={{ textDecoration: "none" }}>
-                <div className="gp-tile"><img src="/img/reward.svg" alt="" /></div>
-                <div className="gp-item-main">
-                  <div className="gp-item-name">{r.name}</div>
-                  <div className="gp-item-sub">{r.remainingLabel} left to redeem</div>
-                </div>
-                <div className="gp-redeem"><span>Redeem</span><span className="gp-redeem-lock"><Icon name="lock" size={16} /></span></div>
-              </Link>
-            ))
-          ) : (
-            <div className="gp-card"><span className="gp-empty-ic"><Icon name="trophy" size={26} /></span><span>No upcoming rewards — you’re all caught up!</span></div>
-          )}
-        </div>
-
         {/* Purchase history */}
         <div className="gp-sec">
           <div className="gp-sec-head"><span className="gp-sec-title">Purchase History</span><Link href="/purchases" className="gp-seeall">See all</Link></div>
@@ -133,6 +114,25 @@ export default function HomePage() {
             ))
           ) : (
             <div className="gp-card"><span className="gp-empty-ic"><Icon name="bag" size={26} /></span><span>Nothing yet. Games you finish and items you buy show up here.</span></div>
+          )}
+        </div>
+
+        {/* Upcoming rewards */}
+        <div className="gp-sec">
+          <div className="gp-sec-head"><span className="gp-sec-title">Upcoming rewards for you</span><Link href="/rewards" className="gp-seeall">See all</Link></div>
+          {data && data.upcomingRewards.length > 0 ? (
+            data.upcomingRewards.map((r) => (
+              <Link key={r.id} href={`/rewards/${r.id}`} className="gp-item" style={{ textDecoration: "none" }}>
+                <div className="gp-tile"><img src="/img/reward.svg" alt="" /></div>
+                <div className="gp-item-main">
+                  <div className="gp-item-name">{r.name}</div>
+                  <div className="gp-item-sub">{r.remainingLabel} left to redeem</div>
+                </div>
+                <div className="gp-redeem"><span>Redeem</span><span className="gp-redeem-lock"><Icon name="lock" size={16} /></span></div>
+              </Link>
+            ))
+          ) : (
+            <div className="gp-card"><span className="gp-empty-ic"><Icon name="trophy" size={26} /></span><span>No upcoming rewards — you’re all caught up!</span></div>
           )}
         </div>
       </div>

@@ -8,6 +8,7 @@ import { RefreshCw, Menu, X } from "lucide-react";
 import { SignOut as LogOut } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Icon } from "@/components/Icon";
+import { CustomerSkeleton } from "@/components/customer/CustomerSkeleton";
 
 export type Player = { id: string; phone: string; name: string | null; firstName: string | null };
 
@@ -72,23 +73,7 @@ export function CustomerProvider({ children }: { children: React.ReactNode }) {
   }
 
   if (loading && !state) {
-    return (
-      <div className="gp-app" aria-busy="true">
-        <div className="gp-main">
-          <header className="gp-head">
-            <div className="skel" style={{ height: 28, width: 160, borderRadius: 9, background: "#cfe0fb" }} />
-            <div className="skel" style={{ height: 16, width: 230, maxWidth: "80%", borderRadius: 6, marginTop: 10, background: "#cfe0fb" }} />
-          </header>
-          <div className="gp-sheet">
-            <div className="skel" style={{ height: 150, borderRadius: 20, marginBottom: 22, border: "1px solid #bbdefb" }} />
-            <div className="skel" style={{ height: 18, width: 180, borderRadius: 6, marginBottom: 14, background: "#cfe0fb" }} />
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="skel" style={{ height: 66, borderRadius: 15, marginBottom: 10, border: "1px solid #bbdefb" }} />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <CustomerSkeleton pathname={pathname} />;
   }
   if (!state) {
     return (

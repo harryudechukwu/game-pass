@@ -756,6 +756,29 @@ html { scrollbar-gutter: stable; }
 @keyframes skel-shimmer { 100% { transform: translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { .skel::after { animation: none; } }
 
+/* Member skeleton follows the actual mobile sheet and desktop sidebar layout. */
+.gp-skel-side-icon { width: 26px; height: 26px; flex: none; border-radius: 8px; background: #cfe0fb; }
+.gp-skel-side-title { width: 130px; height: 20px; background: #cfe0fb; }
+.gp-skel-side-link { display: flex; align-items: center; gap: 12px; height: 48px; padding: 12px 14px; }
+.gp-skel-side-label { width: 92px; height: 16px; background: #cfe0fb; }
+.gp-skel-mobile-menu { pointer-events: none; cursor: default; }
+.gp-skel-mobile-mark { width: 18px; height: 18px; border-radius: 5px; background: #cfe0fb; }
+.gp-skel-back { width: 40px; height: 40px; margin-bottom: 14px; border-radius: 999px; background: #cfe0fb; }
+.gp-skel-greeting { width: 165px; height: 32px; background: #cfe0fb; }
+.gp-skel-subtitle { width: min(330px, 85%); height: 18px; margin-top: 10px; background: #cfe0fb; }
+.gp-skel-hero .gp-hero-inner { display: flex; min-height: 98px; flex-direction: column; justify-content: center; }
+.gp-skel-hero-label { width: 150px; height: 18px; background: #cfe0fb; }
+.gp-skel-hero-amount { width: 185px; height: 34px; margin-top: 10px; background: #cfe0fb; }
+.gp-skel-section-head { justify-content: space-between; }
+.gp-skel-section-title { width: 180px; height: 18px; background: #cfe0fb; }
+.gp-skel-section-link { width: 50px; height: 16px; background: #cfe0fb; }
+.gp-skel-row { min-height: 66px; }
+.gp-skel-tile { width: 44px; height: 48px; flex: none; border-radius: 13px; background: #cfe0fb; }
+.gp-skel-row-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 7px; }
+.gp-skel-row-title { width: min(175px, 85%); height: 17px; background: #cfe0fb; }
+.gp-skel-row-subtitle { width: min(90px, 60%); height: 14px; background: #cfe0fb; }
+.gp-skel-row-amount { width: 68px; height: 19px; flex: none; background: #cfe0fb; }
+
 /* ── Player app sidebar (desktop only) ── */
 .gp-side-logo { display: flex; align-items: center; gap: 10px; padding: 8px 14px 26px; font-weight: 800; font-size: 19px; color: var(--gp-ink); letter-spacing: -0.4px; }
 .gp-side-logo .gp-ico { width: 26px; height: 26px; color: var(--gp-pri); }
@@ -778,14 +801,17 @@ html { scrollbar-gutter: stable; }
     position: sticky; top: 0; align-self: flex-start; height: 100dvh;
     background: transparent; padding: 42px 18px 22px;
   }
-  .gp-app--shell .gp-main { max-width: none; margin: 0; flex: 1; min-width: 0; display: block; background: none; padding-top: 0; }
+  .gp-app--shell .gp-main {
+    max-width: none; margin: 0; flex: 1; min-width: 0; display: block; background: none;
+    padding: 0 24px 0 clamp(32px, 4vw, 64px);
+  }
   .gp-app--shell .gp-signout { display: none; }
   .gp-app--shell .gp-topbar { display: none; }
   .gp-app--shell .gp-menu, .gp-app--shell .gp-hamburger { display: none; }
   .gp-app--shell .gp-dock { display: none; }
 
   .gp-app--shell .gp-head {
-    max-width: 600px; margin: 24px auto 0; padding: 10px 24px 0;
+    max-width: 600px; margin: 24px 0 0; padding: 10px 24px 0;
   }
   .gp-app--shell .gp-hi { font-size: 30px; }
   .gp-app--shell .gp-welcome-sub { margin-top: 2px; font-size: 18px; }
@@ -793,7 +819,7 @@ html { scrollbar-gutter: stable; }
   .gp-app--shell .gp-code-box { font-size: 42px; }
 
   .gp-app--shell .gp-sheet {
-    max-width: 600px; margin: 26px auto 0; background: transparent; color: var(--gp-ink);
+    max-width: 600px; margin: 26px 0 0; background: transparent; color: var(--gp-ink);
     border-radius: 0; padding: 0 24px 60px;
   }
   .gp-app--shell .gp-sec {
