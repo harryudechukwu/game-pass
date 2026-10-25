@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { SquaresFour, GameController, ShoppingBag, Package, Trophy, Users, ClockCounterClockwise, SignOut, ShieldCheck, Scan, UserGear, Receipt, ChartBar, ChartLineUp, IconContext, type Icon } from "@phosphor-icons/react";
+import { SquaresFour, GameController, ShoppingBag, Package, Trophy, Users, ClockCounterClockwise, SignOut, ShieldCheck, Scan, UserGear, Receipt, ChartBar, ChartLineUp, ImageSquare, IconContext, type Icon } from "@phosphor-icons/react";
 import { api, ApiClientError } from "@/lib/client";
 import { Loading } from "@/components/ui";
 
@@ -16,6 +16,7 @@ const nav = [
   { href: "/admin/overview", label: "Overview", icon: ChartBar, roles: ["manager"] },
   { href: "/admin", label: "Dashboard", icon: SquaresFour, roles: ["admin", "staff"] },
   { href: "/admin/analytics", label: "Analytics", icon: ChartLineUp, roles: ["admin", "staff", "manager"] },
+  { href: "/admin/website", label: "Website", icon: ImageSquare, roles: ["admin"] },
   { href: "/admin/games", label: "Games", icon: GameController, roles: ["admin", "staff", "manager"] },
   { href: "/admin/items", label: "Items", icon: ShoppingBag, roles: ["admin", "staff", "manager"] },
   { href: "/admin/inventory", label: "Inventory", icon: Package, roles: ["admin", "staff", "manager"] },

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { ScrollReveal } from "@/components/ScrollReveal";
+import { siteOrigin } from "@/lib/site";
 
 // Outfit: a clean geometric sans — the app's typeface. Self-hosted (400–700) so
 // there's no build-time fetch.
@@ -18,9 +19,12 @@ const outfit = localFont({
   display: "swap",
 });
 
+const origin = siteOrigin();
+
 export const metadata: Metadata = {
+  ...(origin ? { metadataBase: new URL(origin) } : {}),
   title: { default: "Creamy Castle", template: "%s · Creamy Castle" },
-  description: "Creamy Castle — play, shop and earn rewards at the venue. Your spend, games and rewards follow your phone number.",
+  description: "Discover games, treats and rewards for kids and teens at Creamy Castle. See the venue, plan your visit and get directions.",
   applicationName: "Creamy Castle",
 };
 

@@ -89,6 +89,18 @@ export type Redemption = { _id: string; playerId: string; rewardId: string; code
 
 export type Admin = { _id: string; email: string; name: string; password: string; role: string; active?: boolean };
 
+export type GalleryPhoto = {
+  _id: string;
+  url: string;
+  cloudinaryId: string;
+  alt: string;
+  caption: string;
+  width: number;
+  height: number;
+  published: boolean;
+  createdAt: number;
+};
+
 export type Attendant = { _id: string; name: string; username: string; password: string; createdAt: number; active?: boolean; graceUntil?: number | null };
 
 export type Settings = {

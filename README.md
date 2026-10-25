@@ -65,6 +65,35 @@ option on, so already-reconciled inventory is not deducted twice.
 | **Attendant** | `/attendant` | staff — charge a game or sell an item with a phone number or as a walk-in guest |
 | **Operator** | `/admin` | operators — games, items, spend rewards, players, logs, heads-up setting |
 
+## Public website, gallery, and search
+
+The public `/` page includes venue information, opening hours, a photo gallery,
+directions, and common visitor questions. The owner admin can add, caption,
+hide, and re-show real venue photos at `/admin/website`. Uploads go from the
+server to Cloudinary and photo details are stored in MongoDB. JPEG, PNG, and
+WebP images up to 4 MB are accepted. Obtain permission before publishing photos
+of identifiable visitors, especially children. The gallery shows an honest
+placeholder until photos are uploaded.
+
+Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and
+`CLOUDINARY_API_SECRET` as private deployment environment variables. They are
+not used in client-side code. `SITE_URL` defaults to `https://creamycastle.com`.
+If the business has a written street address, set `BUSINESS_STREET_ADDRESS`
+(and optionally `BUSINESS_REGION`); otherwise the page uses the confirmed Maps
+pin and Ogidi locality without inventing a street address. The phone and
+opening hours in `app/page.tsx` reflect the owner's October 2026 details; update
+them when the venue changes them.
+
+The site publishes `/sitemap.xml`, `/robots.txt`, a canonical URL, social
+preview metadata, and LocalBusiness structured data. Admin, attendant, and
+member routes send a `noindex` header. After deployment, verify the domain in
+Google Search Console, submit `https://creamycastle.com/sitemap.xml`, and
+inspect the homepage URL for indexing. Claim the existing Creamy Castle Maps
+listing when setting up Google Business Profile instead of creating a duplicate;
+ensure its hours, phone, category, photos, and website match the live site.
+Indexing and search position are controlled by Google, not guaranteed by these
+changes.
+
 ## Run it locally
 
 Needs a MongoDB instance. `MONGODB_URI` is **required** — there is no localhost

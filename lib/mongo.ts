@@ -40,6 +40,12 @@ export async function getDb(): Promise<Db> {
   return db;
 }
 
+// Public pages only need to read venue content. Avoid running account seeding
+// as a side effect of a crawler or visitor loading the homepage.
+export async function getPublicDb(): Promise<Db> {
+  return (await client()).db(dbName);
+}
+
 const id = (p: string) => `${p}_${nanoid(12)}`;
 
 async function ensureSeed(db: Db): Promise<void> {

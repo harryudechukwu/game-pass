@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/mongo";
-import type { Admin, Attendant, Game, Item, Player, Purchase, Reward, Redemption, Settings } from "@/lib/server/types";
+import type { Admin, Attendant, GalleryPhoto, Game, Item, Player, Purchase, Reward, Redemption, Settings } from "@/lib/server/types";
 
 // Typed collection handles. `await cols()` ensures the DB is connected + seeded.
 export async function cols() {
@@ -13,6 +13,7 @@ export async function cols() {
     redemptions: db.collection<Redemption>("redemptions"),
     admins: db.collection<Admin>("admins"),
     attendants: db.collection<Attendant>("attendants"),
+    gallery: db.collection<GalleryPhoto>("gallery"),
     settings: db.collection<Settings>("settings"),
   };
 }

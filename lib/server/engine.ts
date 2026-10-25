@@ -196,6 +196,41 @@ export async function handle(path: string, method: string, body: Body, ctx: Sess
   const r = path.split("/").filter(Boolean).slice(1); // drop "api"
   const b = body ?? {};
 
+  // Venue photos are managed by the owner; hiding a photo is reversible and
+  // leaves its original Cloudinary file untouched.
+  if (r[0] === "admin" && r[1] === "gallery" && !r[2]) {
+    await requireAdmin(ctx, c, "admin");
+    if (method === "GET") {
+      return {
+        photos: await c.gallery.find({}).sort({ createdAt: -1 }).toArray(),
+        uploadConfigured: Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+      };
+    }
+    if (method === "PATCH") {
+      const id = String(b.id ?? "");
+      const photo = await c.gallery.findOne({ _id: id });
+      if (!photo) throw new HttpError(404, "not_found", "Photo not found.");
+      const updates: { alt?: string; caption?: string; published?: boolean } = {};
+      if ("alt" in b) {
+        const alt = String(b.alt ?? "").trim();
+        if (alt.length < 5 || alt.length > 140) throw new HttpError(400, "validation_error", "Describe the photo in 5–140 characters.");
+        updates.alt = alt;
+      }
+      if ("caption" in b) {
+        const caption = String(b.caption ?? "").trim();
+        if (caption.length > 120) throw new HttpError(400, "validation_error", "Caption must be 120 characters or fewer.");
+        updates.caption = caption;
+      }
+      if ("published" in b) {
+        if (typeof b.published !== "boolean") throw new HttpError(400, "validation_error", "Choose whether to show the photo.");
+        updates.published = b.published;
+      }
+      if (!Object.keys(updates).length) throw new HttpError(400, "validation_error", "Nothing to update.");
+      await c.gallery.updateOne({ _id: id }, { $set: updates });
+      return { photo: { ...photo, ...updates } };
+    }
+  }
+
   // ── player auth ──
   if (r[0] === "auth" && r[1] === "login" && method === "POST") {
     const phone = normPhone(b.phone);
