@@ -38,9 +38,8 @@ export function PeriodPicker({ period, days, onChange }: Props) {
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-40 mt-2 w-72 rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white p-3 text-[#0d47a1]">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4" onClick={() => setOpen(false)}>
+          <div className="w-full max-w-xs rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white p-3 text-[#0d47a1]" onClick={(e) => e.stopPropagation()}>
             <div className="mb-2 flex items-center justify-between">
               <button onClick={() => setView((v) => ({ y: v.m === 0 ? v.y - 1 : v.y, m: v.m === 0 ? 11 : v.m - 1 }))} className="rounded-lg p-1 hover:bg-[#f4f8fd]"><CaretLeft size={18} /></button>
               <span className="text-sm font-bold">{MONTHS[view.m]} {view.y}</span>
@@ -67,7 +66,7 @@ export function PeriodPicker({ period, days, onChange }: Props) {
               <button onClick={() => setOpen(false)} className="rounded-lg bg-[#5a95f2] px-3 py-1 text-xs font-bold text-white">Done</button>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

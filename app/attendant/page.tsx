@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, List, ClockCounterClockwise, IconContext } from "@phosphor-icons/react";
+import { Scan, Check, UserPlus, MagnifyingGlass as Search, Gift, ArrowCounterClockwise as RotateCcw, Minus, Plus, Timer, ShoppingBag, GameController as Gamepad2, SignOut as LogOut, Trash as Trash2, ShoppingCart, List, ClockCounterClockwise, IconContext, Warning } from "@phosphor-icons/react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { api, ApiClientError } from "@/lib/client";
@@ -51,6 +51,7 @@ export default function AttendantPage() {
   const [redeemError, setRedeemError] = useState("");
   const [redeemResult, setRedeemResult] = useState<RedeemResult | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [blockReason, setBlockReason] = useState<string | null>(null);
   const [view, setView] = useState<"order" | "time">("order");
   const [activeTimers, setActiveTimers] = useState(0);
   const draftRef = useRef(false);
@@ -122,6 +123,7 @@ export default function AttendantPage() {
 
   const total = cart.reduce((s, l) => s + l.ref.priceKobo * l.qty, 0);
   const cartCount = cart.reduce((s, l) => s + l.qty, 0);
+  const canReview = walkIn || phone.replace(/\s+/g, "").length >= 6;
 
   async function submitOrder() {
     if (cart.length === 0) return;
@@ -196,6 +198,18 @@ export default function AttendantPage() {
           </div>
           <div className="mt-8 space-y-3">
             <button onClick={() => { setMenuOpen(false); logout(); }} className="flex w-full items-center gap-3 rounded-2xl border border-b-[3px] border-[#e3f3fd] bg-white px-4 py-4 text-left text-lg font-semibold text-[#0d47a1]"><LogOut size={22} weight="duotone" /> Sign out</button>
+          </div>
+        </div>
+      )}
+
+      {/* explains why a gated action button didn't respond, instead of leaving it silently disabled */}
+      {blockReason && (
+        <div className="pop-in fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setBlockReason(null)}>
+          <div className="w-full max-w-sm rounded-3xl border border-b-[3px] border-[#e3f3fd] bg-white p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400/15 text-amber-500"><Warning size={24} weight="duotone" /></div>
+            <h2 className="text-lg font-black text-[#0d47a1]">Not quite ready</h2>
+            <p className="mt-2 text-sm text-[#0d47a1]/70">{blockReason}</p>
+            <button className="btn-primary mt-5 w-full" onClick={() => setBlockReason(null)}>Got it</button>
           </div>
         </div>
       )}
@@ -285,7 +299,17 @@ export default function AttendantPage() {
                 <input className="input text-center text-2xl font-black uppercase tracking-[0.3em]" placeholder="25FZ7" value={redeemCode} onChange={(e) => setRedeemCode(e.target.value)} autoFocus />
                 <div className="mt-5 flex gap-3">
                   <button className="btn-ghost flex-1" onClick={closeRedeem} disabled={redeemBusy}>Cancel</button>
-                  <button className="btn-primary flex-1" onClick={redeemReward} disabled={redeemBusy || redeemCode.trim().length < 4}>{redeemBusy ? <Spinner /> : "Redeem"}</button>
+                  <button
+                    type="button"
+                    className={`btn-primary flex-1 ${redeemCode.trim().length < 4 ? "opacity-60" : ""}`}
+                    disabled={redeemBusy}
+                    onClick={() => {
+                      if (redeemCode.trim().length < 4) { setBlockReason("Enter the full reward code the guest shows you — it needs at least 4 characters."); return; }
+                      void redeemReward();
+                    }}
+                  >
+                    {redeemBusy ? <Spinner /> : "Redeem"}
+                  </button>
                 </div>
               </div>
             )}
@@ -382,7 +406,14 @@ export default function AttendantPage() {
                     {cart.some((l) => l.kind === "game" && (l.ref.durationMinutes ?? 0) > 0) && (
                       <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-300">Game timers start after a {headsUp}s heads-up. Track them in Time keeping.</p>
                     )}
-                    <button className="btn-primary w-full py-4" disabled={!walkIn && phone.replace(/\s+/g, "").length < 6} onClick={() => { setError(""); setReview(true); }}>
+                    <button
+                      type="button"
+                      className={`btn-primary w-full py-4 ${!canReview ? "opacity-60" : ""}`}
+                      onClick={() => {
+                        if (!canReview) { setBlockReason("Enter the customer's phone number, or tap “Walk-in · no phone” in step 1, before you can review and log this order."); return; }
+                        setError(""); setReview(true);
+                      }}
+                    >
                       Review order
                     </button>
                   </div>
