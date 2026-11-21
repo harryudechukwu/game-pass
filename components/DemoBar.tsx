@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
-// Only rendered in the demo build. A small floating switcher so a visitor can
-// jump straight into each of the three apps (logins are prefilled).
+// Only rendered in the demo build, and only on the public home page — once a
+// visitor picks an app the bar would just clutter the login/console screens.
 export function DemoBar() {
+  const pathname = usePathname();
   const link = { color: "#0d47a1", fontWeight: 700, textDecoration: "none", fontSize: 13 } as const;
   const dot = { color: "#cbd8e8" } as const;
+  if (pathname !== "/") return null;
   return (
     <div
       className="no-print"
