@@ -16,7 +16,7 @@ export function venueAddress() {
   // The existing venue copy identifies Ogidi; use the Maps pin for the exact
   // location until a written street address is confirmed.
   const city = process.env.BUSINESS_CITY?.trim() || "Ogidi";
-  const region = process.env.BUSINESS_REGION?.trim();
+  const region = process.env.BUSINESS_REGION?.trim() || "Anambra";
   const country = process.env.BUSINESS_COUNTRY?.trim() || "NG";
   return { street, city, region, country };
 }

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { GameController, Gift, IceCream, Images, NavigationArrow, Phone, SignIn, Sparkle } from "@phosphor-icons/react/dist/ssr";
+import { IceCream, MapPin, NavigationArrow, Phone, SignIn } from "@phosphor-icons/react/dist/ssr";
 import { getPublicDb } from "@/lib/mongo";
 import { galleryImageUrl } from "@/lib/gallery";
 import { siteOrigin, venueAddress } from "@/lib/site";
 import type { GalleryPhoto } from "@/lib/server/types";
+import { GlobeStory, type StoryPhoto } from "@/components/landing/GlobeStory";
 
 // The venue's Google Maps pin opens Maps where the visitor can tap Directions
 // (Maps uses their current location as the start).
@@ -43,6 +44,13 @@ async function publishedPhotos(): Promise<GalleryPhoto[]> {
 export default async function LandingPage() {
   const photos = await publishedPhotos();
   const address = venueAddress();
+  const storyPhotos: StoryPhoto[] = photos.slice(0, 6).map((photo) => ({
+    id: String(photo._id),
+    src: galleryImageUrl(photo.url, 640),
+    srcSet: `${galleryImageUrl(photo.url, 400)} 400w, ${galleryImageUrl(photo.url, 800)} 800w`,
+    full: photo.url,
+    alt: photo.alt,
+  }));
   const structuredData = origin ? {
     "@context": "https://schema.org",
     "@type": address ? "LocalBusiness" : "Organization",
@@ -76,10 +84,9 @@ export default async function LandingPage() {
       <link rel="preload" as="image" href="/img/cc-bg-desktop.png" media="(min-width: 768px)" />
       <nav className="cc-public-nav" aria-label="Main navigation">
         <a href="#top" className="cc-public-brand"><IceCream size={24} weight="duotone" aria-hidden="true" /> Creamy Castle</a>
-        <div className="cc-public-nav-links"><a href="#experience">Explore</a><a href="#gallery">Gallery</a><a href="#visit">Visit us</a></div>
+        <div className="cc-public-nav-links"><a href="#find-us">Find us</a><a href="#visit">Visit us</a></div>
       </nav>
       <div className="cc-landing-inner">
-        <div className="cc-landing-logo"><Sparkle size={21} weight="fill" aria-hidden="true" /> Come for the fun, stay for the memories</div>
         <h1 id="landing-title" className="cc-landing-title">Where kids &amp; teens come to play</h1>
         <p className="cc-landing-sub">Games, treats and rewards — all the fun under one roof. Discover what’s waiting for you at Creamy Castle.</p>
         <div className="cc-landing-actions">
@@ -91,72 +98,14 @@ export default async function LandingPage() {
           </Link>
         </div>
       </div>
-      <a className="cc-landing-scroll" href="#experience">Explore the venue <span aria-hidden="true">↓</span></a>
       </section>
 
-      <section className="cc-section cc-experience cc-reveal" id="experience" aria-labelledby="experience-title">
-        <div className="cc-section-heading">
-          <p className="cc-eyebrow">A little something for everyone</p>
-          <h2 id="experience-title">Make a day of it</h2>
-          <p>There’s room to play, grab a treat, and keep track of the fun you’ve had.</p>
-        </div>
-        <div className="cc-feature-grid">
-          <article className="cc-feature-card cc-feature-card--games">
-            <span className="cc-feature-icon"><GameController size={30} weight="duotone" aria-hidden="true" /></span>
-            <span className="cc-feature-number">01 / PLAY</span>
-            <h3>Games for kids &amp; teens</h3>
-            <p>Drop in and explore the games. Find something fun for the younger ones and the teenagers too.</p>
-          </article>
-          <article className="cc-feature-card cc-feature-card--treats">
-            <span className="cc-feature-icon"><IceCream size={30} weight="duotone" aria-hidden="true" /></span>
-            <span className="cc-feature-number">02 / ENJOY</span>
-            <h3>Treats along the way</h3>
-            <p>Take a break between games and pick up something from the venue’s selection of items.</p>
-          </article>
-          <article className="cc-feature-card cc-feature-card--rewards">
-            <span className="cc-feature-icon"><Gift size={30} weight="duotone" aria-hidden="true" /></span>
-            <span className="cc-feature-number">03 / RETURN</span>
-            <h3>Rewards to look forward to</h3>
-            <p>Members can track their purchases and see the rewards they’re working toward in their account.</p>
-          </article>
-        </div>
-      </section>
+      <GlobeStory photos={storyPhotos} />
+      <div className="cc-dawn" aria-hidden="true" />
 
-      <section className="cc-section cc-gallery-section cc-reveal" id="gallery" aria-labelledby="gallery-title">
-        <div className="cc-section-heading">
-          <p className="cc-eyebrow">See the place</p>
-          <h2 id="gallery-title">A look inside Creamy Castle</h2>
-          <p>Real moments and corners of the venue, shared as photos become available.</p>
-        </div>
-        {photos.length ? (
-          <div className="cc-gallery-grid">
-            {photos.map((photo) => (
-              <figure key={photo._id} className="cc-gallery-photo">
-                <a href={photo.url} target="_blank" rel="noreferrer" aria-label={`Open photo: ${photo.alt}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={galleryImageUrl(photo.url, 800)}
-                    srcSet={`${galleryImageUrl(photo.url, 400)} 400w, ${galleryImageUrl(photo.url, 800)} 800w, ${galleryImageUrl(photo.url, 1200)} 1200w`}
-                    sizes="(min-width: 1200px) 380px, (min-width: 700px) 33vw, 50vw"
-                    alt={photo.alt}
-                    width={photo.width}
-                    height={photo.height}
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </a>
-                {photo.caption && <figcaption>{photo.caption}</figcaption>}
-              </figure>
-            ))}
-          </div>
-        ) : (
-          <div className="cc-gallery-empty"><Images size={44} weight="duotone" aria-hidden="true" /><p>Venue photos are coming soon.</p><span>Check back for a closer look at Creamy Castle.</span></div>
-        )}
-      </section>
-
-      <section className="cc-section cc-visit cc-reveal" id="visit" aria-labelledby="visit-title">
-        <div className="cc-visit-copy">
-          <p className="cc-eyebrow">Ready when you are</p>
+      <section className="cc-visit" id="visit" aria-labelledby="visit-title">
+        <div className="cc-visit-inner cc-reveal">
+          <span className="cc-visit-badge"><MapPin size={32} weight="duotone" aria-hidden="true" /></span>
           <h2 id="visit-title">Come see us in person</h2>
           <p>Bring the family, find a game, and enjoy some time together. We’d love to see you.</p>
           {address && <p className="cc-visit-address">{address.street ? `${address.street}, ` : ""}{address.city}{address.region ? `, ${address.region}` : ""}</p>}
@@ -169,25 +118,12 @@ export default async function LandingPage() {
             <a href={`tel:${PHONE_E164}`} className="cc-btn cc-btn--light"><Phone size={19} weight="duotone" aria-hidden="true" /> {PHONE_DISPLAY}</a>
           </div>
         </div>
-        <div className="cc-visit-art" aria-hidden="true"><span className="cc-visit-art-circle"><IceCream size={92} weight="duotone" /></span><span className="cc-visit-art-star">✦</span></div>
-      </section>
-
-      <section className="cc-section cc-faq cc-reveal" aria-labelledby="faq-title">
-        <div className="cc-section-heading">
-          <p className="cc-eyebrow">Good to know</p>
-          <h2 id="faq-title">Before you visit</h2>
-        </div>
-        <div className="cc-faq-list">
-          <details><summary>Do I need an account to visit?</summary><p>No. You can visit and buy as a walk-in guest. A member account lets you see your purchase history and rewards.</p></details>
-          <details><summary>Are there games for different ages?</summary><p>Yes. Creamy Castle has games for kids and teenagers. Ask the team at the venue which games are available for your group.</p></details>
-          <details><summary>Where can I see my rewards?</summary><p>Sign in with the phone number linked to your purchases, then open Rewards in your account.</p></details>
-        </div>
       </section>
 
       <footer className="cc-footer">
         <a href="#top" className="cc-footer-brand"><IceCream size={23} weight="duotone" aria-hidden="true" /> Creamy Castle</a>
         <p>Games, treats and good times.</p>
-        <div><a href="#gallery">Gallery</a><a href="#visit">Visit us</a><Link href="/login">Member login</Link></div>
+        <div><a href="#find-us">Find us</a><a href="#visit">Visit us</a><Link href="/login">Member login</Link></div>
       </footer>
     </main>
   );
