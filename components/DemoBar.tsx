@@ -19,7 +19,6 @@ export function DemoBar() {
         background: "#fff", border: "1px solid #bbdefb", borderBottomWidth: 3, borderRadius: 999, fontFamily: "inherit",
       }}
     >
-      <span style={{ fontSize: 12, fontWeight: 800, color: "#5a95f2", letterSpacing: "-0.3px" }}>DEMO</span>
       <Link href="/login" style={link}>Member</Link>
       <span style={dot}>·</span>
       <Link href="/attendant/login" style={link}>Attendant</Link>
